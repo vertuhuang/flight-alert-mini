@@ -1,0 +1,42 @@
+<view class="page">
+  <view class="card">
+    <view class="row">
+      <view>
+        <view class="section-title">机票价格提醒</view>
+        <view class="muted">基于后端抓价服务管理监控任务</view>
+      </view>
+      <button class="button-primary" size="mini" bindtap="goCreateTask">新建任务</button>
+    </view>
+    <view class="spacer-16"></view>
+    <view class="muted">{{healthText}}</view>
+  </view>
+
+  <view class="spacer-24"></view>
+
+  <block wx:if="{{tasks.length}}">
+    <block wx:for="{{tasks}}" wx:key="id">
+      <view class="card" style="margin-bottom: 20rpx;" data-id="{{item.id}}" bindtap="openTaskDetail">
+        <view class="row">
+          <view class="section-title" style="margin-bottom: 0;">{{item.name}}</view>
+          <view class="chip {{item.active ? 'chip--green' : 'chip--gray'}}">
+            {{item.active ? '监控中' : '已暂停'}}
+          </view>
+        </view>
+        <view class="spacer-16"></view>
+        <view>{{item.placeFrom}} -> {{item.placeTo}}</view>
+        <view class="muted" style="margin-top: 8rpx;">{{item.flightWay === 'Roundtrip' ? '往返' : '单程'}} · 阈值 {{item.threshold}} 元 · 每 {{item.checkIntervalSec}} 秒检查</view>
+        <view class="muted" style="margin-top: 8rpx;">出发：{{item.departDatesText}}</view>
+        <view wx:if="{{item.flightWay === 'Roundtrip'}}" class="muted" style="margin-top: 8rpx;">返程：{{item.returnDatesText}}</view>
+        <view wx:if="{{item.latestSummary && item.latestSummary.minPrice}}" style="margin-top: 12rpx;">最新最低价：{{item.latestSummary.minPrice}} 元</view>
+        <view class="muted" style="margin-top: 8rpx;">上次检查：{{item.lastCheckedText || '尚未检查'}}</view>
+        <view class="muted" style="margin-top: 8rpx;">下次检查：{{item.nextCheckText || '待定'}}</view>
+        <view wx:if="{{item.lastError}}" style="margin-top: 8rpx; color: #dc2626;">错误：{{item.lastError}}</view>
+      </view>
+    </block>
+  </block>
+
+  <view wx:else class="card">
+    <view class="section-title">还没有任务</view>
+    <view class="muted">先创建一个监控任务，再从详情页手动检查或等定时任务执行。</view>
+  </view>
+</view>

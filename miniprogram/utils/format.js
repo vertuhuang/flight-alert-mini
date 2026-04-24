@@ -1,0 +1,29 @@
+function formatDateCode(value) {
+  if (!value || value.length !== 8) {
+    return value || "";
+  }
+
+  return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+  const pad = (num) => String(num).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate()
+  )} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function joinDates(list) {
+  return (list || []).map(formatDateCode).join(", ");
+}
+
+module.exports = {
+  formatDateCode,
+  formatDateTime,
+  joinDates
+};

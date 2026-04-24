@@ -1,0 +1,52 @@
+<view class="page" wx:if="{{task}}">
+  <view class="card">
+    <view class="row">
+      <view class="section-title" style="margin-bottom: 0;">{{task.name}}</view>
+      <view class="chip {{task.active ? 'chip--green' : 'chip--gray'}}">
+        {{task.active ? '监控中' : '已暂停'}}
+      </view>
+    </view>
+    <view class="spacer-16"></view>
+    <view>{{task.placeFrom}} -> {{task.placeTo}}</view>
+    <view class="muted" style="margin-top: 8rpx;">{{task.flightWay === 'Roundtrip' ? '往返' : '单程'}} · 阈值 {{task.threshold}} 元 · 每 {{task.checkIntervalSec}} 秒检查</view>
+    <view class="muted" style="margin-top: 8rpx;">出发：{{task.departDatesText}}</view>
+    <view wx:if="{{task.flightWay === 'Roundtrip'}}" class="muted" style="margin-top: 8rpx;">返程：{{task.returnDatesText}}</view>
+    <view wx:if="{{task.latestSummary && task.latestSummary.minPrice}}" style="margin-top: 12rpx;">最新最低价：{{task.latestSummary.minPrice}} 元</view>
+    <view class="muted" style="margin-top: 8rpx;">上次检查：{{task.lastCheckedText || '尚未检查'}}</view>
+    <view class="muted" style="margin-top: 8rpx;">下次检查：{{task.nextCheckText || '待定'}}</view>
+    <view wx:if="{{task.lastError}}" style="margin-top: 8rpx; color: #dc2626;">错误：{{task.lastError}}</view>
+
+    <view class="spacer-24"></view>
+    <view class="row">
+      <button class="button-primary" size="mini" loading="{{checking}}" bindtap="checkNow">立即检查</button>
+      <button class="{{task.active ? 'button-danger' : 'button-secondary'}}" size="mini" bindtap="toggleActive">
+        {{task.active ? '暂停任务' : '启用任务'}}
+      </button>
+    </view>
+  </view>
+
+  <view class="spacer-24"></view>
+
+  <view class="card">
+    <view class="section-title">检查历史</view>
+    <block wx:if="{{history.length}}">
+      <block wx:for="{{history}}" wx:key="id">
+        <view style="padding: 18rpx 0; border-bottom: 1rpx solid #e2e8f0;">
+          <view class="row">
+            <view>{{item.checkedAtText}}</view>
+            <view wx:if="{{item.summary && item.summary.minPrice}}" class="muted">最低 {{item.summary.minPrice}} 元</view>
+          </view>
+          <view wx:if="{{item.changes.length}}" style="margin-top: 10rpx;">
+            <block wx:for="{{item.changes}}" wx:key="key">
+              <view class="muted" style="margin-top: 6rpx;">
+                {{item.label}} · {{item.type === 'rise' ? '上涨' : item.type === 'drop' ? '下降' : '首次记录'}}<text wx:if="{{item.delta !== null}}"> {{item.deltaAbs}} 元</text>
+              </view>
+            </block>
+          </view>
+          <view wx:else class="muted" style="margin-top: 10rpx;">本次无达到阈值的变化</view>
+        </view>
+      </block>
+    </block>
+    <view wx:else class="muted">还没有历史记录</view>
+  </view>
+</view>

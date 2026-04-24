@@ -1,0 +1,13 @@
+{
+  "name": "flight-alert-mini-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Backend service for Flight Alert Mini",
+  "main": "src/server.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "3.10.1"
+  },
+  "scripts": {
+    "start": "node src/server.js"
+  }
+}
