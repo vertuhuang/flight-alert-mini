@@ -78,6 +78,53 @@ class MonitorService {
     return db.histories[id] || [];
   }
 
+  async getEvents({ taskId, limit = 50 } = {}) {
+    const db = await this.store.read();
+    let events = db.events || [];
+    if (taskId) {
+      events = events.filter((e) => e.taskId === taskId);
+    }
+    // Enrich with task names
+    const taskMap = {};
+    for (const task of db.tasks) {
+      taskMap[task.id] = task.name;
+    }
+    return events.slice(0, limit).map((e) => ({
+      ...e,
+      taskName: taskMap[e.taskId] || e.taskId
+    }));
+  }
+
+  async clearUnread(id) {
+    const db = await this.store.read();
+    const task = db.tasks.find((item) => item.id === id);
+    if (!task) return null;
+
+    const updated = { ...task, unreadEvents: 0, updatedAt: isoNow() };
+    await this.store.update((nextDb) => ({
+      ...nextDb,
+      tasks: nextDb.tasks.map((item) => (item.id === id ? updated : item))
+    }));
+    return updated;
+  }
+
+  async deleteTask(id) {
+    const db = await this.store.read();
+    const task = db.tasks.find((item) => item.id === id);
+    if (!task) return null;
+
+    await this.store.update((nextDb) => ({
+      ...nextDb,
+      tasks: nextDb.tasks.filter((item) => item.id !== id),
+      histories: {
+        ...nextDb.histories,
+        [id]: undefined
+      },
+      events: nextDb.events.filter((item) => item.taskId !== id)
+    }));
+    return task;
+  }
+
   validateTaskInput(input, { partial = false } = {}) {
     const flightWay = input.flightWay || "Oneway";
     const departDates = normalizeDateList(input.departDates);
@@ -90,6 +137,8 @@ class MonitorService {
         ? DEFAULT_CHECK_INTERVAL_SEC
         : input.checkIntervalSec
     );
+    const targetPrice = input.targetPrice == null ? null : Number(input.targetPrice);
+    const notifyOnDrop = input.notifyOnDrop == null ? true : Boolean(input.notifyOnDrop);
 
     if (!partial || input.name != null) {
       if (!String(input.name || "").trim()) {
@@ -133,6 +182,10 @@ class MonitorService {
       throw new Error("checkIntervalSec 不能小于 30 秒");
     }
 
+    if (targetPrice !== null && (Number.isNaN(targetPrice) || targetPrice <= 0)) {
+      throw new Error("目标价格必须是正数");
+    }
+
     return {
       name: String(input.name || "").trim(),
       placeFrom: String(input.placeFrom || "").trim().toUpperCase(),
@@ -142,6 +195,8 @@ class MonitorService {
       returnDates,
       threshold,
       checkIntervalSec,
+      targetPrice,
+      notifyOnDrop,
       pushplusToken: String(input.pushplusToken || "").trim(),
       active: input.active == null ? true : Boolean(input.active)
     };
@@ -160,6 +215,7 @@ class MonitorService {
       lastError: null,
       lastCheckedAt: null,
       nextCheckAt: now,
+      unreadEvents: 0,
       createdAt: now,
       updatedAt: now
     };
@@ -224,15 +280,6 @@ class MonitorService {
         Date.now() + task.checkIntervalSec * 1000
       ).toISOString();
 
-      const historyItem = {
-        id: createId("history"),
-        taskId: id,
-        checkedAt,
-        summary,
-        changes,
-        snapshot
-      };
-
       const updatedTask = {
         ...task,
         baseline: this.#buildBaseline(snapshot),
@@ -244,44 +291,76 @@ class MonitorService {
         updatedAt: checkedAt
       };
 
-      const notifyResults = [];
-      for (const change of changes) {
-        if (change.type === "initial") {
-          continue;
-        }
+      // 仅当价格发生变化（或有初始基准）时才记录历史
+      const shouldLogHistory = changes.length > 0;
 
+      // Filter changes for notification based on strategy
+      const notifyChanges = changes.filter((change) => {
+        if (change.type === "initial") return false;
+        // notifyOnDrop: only notify on price drops
+        if (task.notifyOnDrop && change.type === "rise") return false;
+        // targetPrice: only notify when current price drops below target
+        if (task.targetPrice && change.current > task.targetPrice) return false;
+        return true;
+      });
+
+      const notifyResults = [];
+      if (notifyChanges.length > 0 && task.pushplusToken) {
+        // Merge all changes into one notification
         const title = "机票价格提醒";
-        const content = this.#buildNotificationMessage(task, change);
+        const content = this.#buildMergedNotification(task, notifyChanges);
         const result = await this.notifier.send({
           token: task.pushplusToken,
           title,
           content
         });
-        notifyResults.push({ change, result });
+        for (const change of notifyChanges) {
+          notifyResults.push({ change, result });
+        }
       }
 
-      await this.store.update((nextDb) => ({
-        ...nextDb,
-        tasks: nextDb.tasks.map((item) => (item.id === id ? updatedTask : item)),
-        histories: {
-          ...nextDb.histories,
-          [id]: [historyItem, ...(nextDb.histories[id] || [])].slice(0, 50)
-        },
-        events: [
-          {
-            id: createId("event"),
-            taskId: id,
-            createdAt: checkedAt,
-            changes,
-            notifyResults
-          },
-          ...nextDb.events
-        ].slice(0, 200)
-      }));
+      // Update unreadEvents count
+      const unreadDelta = notifyChanges.length > 0 ? 1 : 0;
+      updatedTask.unreadEvents = (task.unreadEvents || 0) + unreadDelta;
+
+      await this.store.update((nextDb) => {
+        const newHistories = shouldLogHistory
+          ? {
+              ...nextDb.histories,
+              [id]: [
+                {
+                  id: createId("history"),
+                  taskId: id,
+                  checkedAt,
+                  summary,
+                  changes,
+                  snapshot
+                },
+                ...(nextDb.histories[id] || [])
+              ].slice(0, 50)
+          : nextDb.histories;
+
+        return {
+          ...nextDb,
+          tasks: nextDb.tasks.map((item) => (item.id === id ? updatedTask : item)),
+          histories: newHistories,
+          events: [
+            {
+              id: createId("event"),
+              taskId: id,
+              createdAt: checkedAt,
+              changes,
+              notifyResults,
+              notified: notifyChanges.length > 0
+            },
+            ...nextDb.events
+          ].slice(0, 200)
+        };
+      });
 
       return {
         task: updatedTask,
-        historyItem,
+        changes,
         notifyResults
       };
     } catch (error) {
@@ -393,15 +472,29 @@ class MonitorService {
     return changes;
   }
 
-  #buildNotificationMessage(task, change) {
-    const trend = change.type === "rise" ? "上涨" : "下降";
-    return [
-      `${task.name}`,
-      `${task.placeFrom} -> ${task.placeTo}`,
-      `${change.label} 价格${trend} ${Math.abs(change.delta)} 元`,
-      `当前价格：${change.current} 元`,
-      `上一价格：${change.previous} 元`
-    ].join("\n");
+  #buildMergedNotification(task, changes) {
+    const route = `${task.placeFrom} → ${task.placeTo}`;
+    const wayLabel = task.flightWay === "Roundtrip" ? "往返" : "单程";
+
+    const lines = [
+      `**${task.name}**`,
+      `${route}（${wayLabel}）`,
+      ""
+    ];
+
+    for (const change of changes) {
+      const icon = change.type === "drop" ? "📉" : "📈";
+      const trend = change.type === "drop" ? "下降" : "上涨";
+      lines.push(`${icon} ${change.label} 价格${trend} **${Math.abs(change.delta)}元**`);
+      lines.push(`　当前：${change.current}元 | 之前：${change.previous}元`);
+    }
+
+    if (task.targetPrice) {
+      lines.push("");
+      lines.push(`🎯 目标价：${task.targetPrice}元`);
+    }
+
+    return lines.join("\n");
   }
 }
 

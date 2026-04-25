@@ -1,61 +1,154 @@
 <view class="page">
   <view class="card">
-    <view class="section-title">任务配置</view>
+    <!-- Task name -->
+    <view class="section-title">基本信息</view>
+    <t-input
+      label="任务名称"
+      placeholder="例如：济南飞昆明五一"
+      value="{{form.name}}"
+      bind:change="onInputChange"
+      data-field="name"
+    />
 
-    <view class="field">
-      <view class="field__label">任务名称</view>
-      <input class="field__input" placeholder="例如：济南飞昆明五一单程" data-field="name" value="{{form.name}}" bindinput="onInput" />
+    <!-- Route -->
+    <view style="margin-top: 24rpx;">
+      <view class="field-label">出发城市</view>
+      <airport-picker
+        label="出发城市"
+        placeholder="选择出发城市"
+        value="{{form.placeFrom}}"
+        bind:change="onFromChange"
+      />
     </view>
 
-    <view class="field">
-      <view class="field__label">出发机场代码</view>
-      <input class="field__input" placeholder="例如 TNA" maxlength="3" data-field="placeFrom" value="{{form.placeFrom}}" bindinput="onInput" />
+    <view style="margin-top: 16rpx;">
+      <view class="field-label">到达城市</view>
+      <airport-picker
+        label="到达城市"
+        placeholder="选择到达城市"
+        value="{{form.placeTo}}"
+        bind:change="onToChange"
+      />
     </view>
 
-    <view class="field">
-      <view class="field__label">到达机场代码</view>
-      <input class="field__input" placeholder="例如 KMG" maxlength="3" data-field="placeTo" value="{{form.placeTo}}" bindinput="onInput" />
+    <!-- Flight way -->
+    <view style="margin-top: 24rpx;">
+      <t-picker
+        title="航程类型"
+        value="{{flightWayIndex}}"
+        options="{{flightWayOptions}}"
+        bind:confirm="onFlightWayConfirm"
+      >
+        <t-cell title="航程类型" note="{{flightWayLabels[flightWayIndex]}}" arrow />
+      </t-picker>
     </view>
 
-    <view class="field">
-      <view class="field__label">航程类型</view>
-      <picker class="field__picker" mode="selector" range="{{flightWays}}" value="{{flightWayIndex}}" bindchange="onFlightWayChange">
-        <view style="line-height: 84rpx; padding: 0 24rpx;">{{flightWays[flightWayIndex]}}</view>
-      </picker>
+    <!-- Dates -->
+    <view style="margin-top: 24rpx;">
+      <view class="field-label">出发日期</view>
+      <t-textarea
+        placeholder="多个日期用逗号分隔，如 20260501,20260502"
+        value="{{form.departDates}}"
+        bind:change="onInputChange"
+        data-field="departDates"
+        maxlength="{{200}}"
+        autosize
+      />
     </view>
 
-    <view class="field">
-      <view class="field__label">出发日期</view>
-      <textarea class="field__textarea" placeholder="多个日期用逗号分隔，格式 YYYYMMDD" data-field="departDates" value="{{form.departDates}}" bindinput="onInput" />
+    <view wx:if="{{flightWayIndex === 1}}" style="margin-top: 16rpx;">
+      <view class="field-label">返程日期</view>
+      <t-textarea
+        placeholder="多个日期用逗号分隔"
+        value="{{form.returnDates}}"
+        bind:change="onInputChange"
+        data-field="returnDates"
+        maxlength="{{200}}"
+        autosize
+      />
     </view>
+  </view>
 
-    <view wx:if="{{flightWays[flightWayIndex] === 'Roundtrip'}}" class="field">
-      <view class="field__label">返程日期</view>
-      <textarea class="field__textarea" placeholder="多个日期用逗号分隔，格式 YYYYMMDD" data-field="returnDates" value="{{form.returnDates}}" bindinput="onInput" />
+  <!-- Monitor strategy -->
+  <view class="card">
+    <view class="section-title">监控策略</view>
+
+    <t-input
+      label="变动阈值"
+      placeholder="价格变动多少元时通知"
+      type="number"
+      value="{{form.threshold}}"
+      bind:change="onInputChange"
+      data-field="threshold"
+      suffix="元"
+    />
+
+    <t-input
+      label="目标价格"
+      placeholder="低于此价格时通知（可选）"
+      type="number"
+      value="{{form.targetPrice}}"
+      bind:change="onInputChange"
+      data-field="targetPrice"
+      suffix="元"
+    />
+
+    <t-input
+      label="检查间隔"
+      placeholder="多久检查一次价格"
+      type="number"
+      value="{{form.checkIntervalSec}}"
+      bind:change="onInputChange"
+      data-field="checkIntervalSec"
+      suffix="秒"
+    />
+
+    <view style="margin-top: 16rpx;">
+      <t-cell title="仅降价时通知" bordered="{{false}}">
+        <t-switch
+          slot="note"
+          value="{{form.notifyOnDrop}}"
+          bind:change="onNotifyDropChange"
+        />
+      </t-cell>
     </view>
+  </view>
 
-    <view class="field">
-      <view class="field__label">价格变动阈值（元）</view>
-      <input class="field__input" type="number" data-field="threshold" value="{{form.threshold}}" bindinput="onInput" />
+  <!-- Notification -->
+  <view class="card">
+    <view class="section-title">通知方式</view>
+    <view class="section-desc">配置 PushPlus Token 后，价格变动会推送到微信</view>
+
+    <t-textarea
+      placeholder="PushPlus Token（不填则仅在小程序内记录）"
+      value="{{form.pushplusToken}}"
+      bind:change="onInputChange"
+      data-field="pushplusToken"
+      maxlength="{{200}}"
+      autosize
+    />
+
+    <view style="margin-top: 16rpx;">
+      <t-cell title="创建后立即启用" bordered="{{false}}">
+        <t-switch
+          slot="note"
+          value="{{form.active}}"
+          bind:change="onActiveChange"
+        />
+      </t-cell>
     </view>
+  </view>
 
-    <view class="field">
-      <view class="field__label">检查间隔（秒）</view>
-      <input class="field__input" type="number" data-field="checkIntervalSec" value="{{form.checkIntervalSec}}" bindinput="onInput" />
-    </view>
-
-    <view class="field">
-      <view class="field__label">PushPlus Token</view>
-      <textarea class="field__textarea" placeholder="不填则只记录事件，不推送微信消息" data-field="pushplusToken" value="{{form.pushplusToken}}" bindinput="onInput" />
-    </view>
-
-    <view class="field">
-      <view class="row">
-        <view class="field__label" style="margin-bottom: 0;">创建后立即启用</view>
-        <switch checked="{{form.active}}" bindchange="onActiveChange" />
-      </view>
-    </view>
-
-    <button class="button-primary" loading="{{submitting}}" bindtap="submit">保存任务</button>
+  <!-- Submit -->
+  <view style="margin-top: 32rpx; padding-bottom: 40rpx;">
+    <t-button
+      theme="primary"
+      size="large"
+      block
+      loading="{{submitting}}"
+      bind:tap="submit"
+    >
+      {{isEdit ? '更新任务' : '创建任务'}}
+    </t-button>
   </view>
 </view>

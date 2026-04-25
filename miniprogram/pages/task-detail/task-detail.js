@@ -1,5 +1,6 @@
 const { request } = require("../../utils/request");
 const { formatDateTime, joinDates } = require("../../utils/format");
+const { getCityByCode } = require("../../utils/airports");
 
 Page({
   data: {
@@ -7,7 +8,8 @@ Page({
     loading: false,
     checking: false,
     task: null,
-    history: []
+    history: [],
+    showDeleteDialog: false
   },
 
   onLoad(query) {
@@ -19,9 +21,7 @@ Page({
   },
 
   async loadDetail() {
-    if (!this.data.id) {
-      return;
-    }
+    if (!this.data.id) return;
 
     this.setData({ loading: true });
     try {
@@ -29,6 +29,14 @@ Page({
         request({ url: `/tasks/${this.data.id}` }),
         request({ url: `/tasks/${this.data.id}/history` })
       ]);
+
+      // Clear unread
+      if (task.unreadEvents) {
+        request({
+          url: `/tasks/${this.data.id}/clear-unread`,
+          method: "POST"
+        }).catch(() => {});
+      }
 
       const history = (historyRes.items || []).map((item) => ({
         ...item,
@@ -42,6 +50,8 @@ Page({
       this.setData({
         task: {
           ...task,
+          placeFromText: getCityByCode(task.placeFrom),
+          placeToText: getCityByCode(task.placeTo),
           departDatesText: joinDates(task.departDates),
           returnDatesText: joinDates(task.returnDates),
           lastCheckedText: formatDateTime(task.lastCheckedAt),
@@ -60,9 +70,7 @@ Page({
   },
 
   async checkNow() {
-    if (this.data.checking) {
-      return;
-    }
+    if (this.data.checking) return;
 
     this.setData({ checking: true });
     try {
@@ -70,10 +78,7 @@ Page({
         url: `/tasks/${this.data.id}/check-now`,
         method: "POST"
       });
-      wx.showToast({
-        title: "检查完成",
-        icon: "success"
-      });
+      wx.showToast({ title: "检查完成", icon: "success" });
       await this.loadDetail();
     } catch (error) {
       wx.showToast({
@@ -86,18 +91,14 @@ Page({
   },
 
   async toggleActive() {
-    if (!this.data.task) {
-      return;
-    }
+    if (!this.data.task) return;
 
     const nextActive = !this.data.task.active;
     try {
       await request({
         url: `/tasks/${this.data.id}`,
         method: "PATCH",
-        data: {
-          active: nextActive
-        }
+        data: { active: nextActive }
       });
       wx.showToast({
         title: nextActive ? "已启用" : "已暂停",
@@ -107,6 +108,33 @@ Page({
     } catch (error) {
       wx.showToast({
         title: error.message || "更新失败",
+        icon: "none"
+      });
+    }
+  },
+
+  goEdit() {
+    wx.navigateTo({
+      url: `/pages/task-form/task-form?id=${this.data.id}`
+    });
+  },
+
+  confirmDelete() {
+    this.setData({ showDeleteDialog: true });
+  },
+
+  async doDelete() {
+    this.setData({ showDeleteDialog: false });
+    try {
+      await request({
+        url: `/tasks/${this.data.id}`,
+        method: "DELETE"
+      });
+      wx.showToast({ title: "已删除", icon: "success" });
+      setTimeout(() => wx.navigateBack(), 500);
+    } catch (error) {
+      wx.showToast({
+        title: error.message || "删除失败",
         icon: "none"
       });
     }
