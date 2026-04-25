@@ -1,5 +1,5 @@
 const { request } = require("../../utils/request");
-const { joinDates, formatDateTime } = require("../../utils/format");
+const { formatDateTime } = require("../../utils/format");
 
 Page({
   data: {
@@ -10,6 +10,10 @@ Page({
 
   onShow() {
     this.loadData();
+  },
+
+  onPullDownRefresh() {
+    this.loadData().then(() => wx.stopPullDownRefresh());
   },
 
   async loadData() {
@@ -23,8 +27,6 @@ Page({
 
       const tasks = (tasksRes.items || []).map((task) => ({
         ...task,
-        departDatesText: joinDates(task.departDates),
-        returnDatesText: joinDates(task.returnDates),
         lastCheckedText: formatDateTime(task.lastCheckedAt),
         nextCheckText: formatDateTime(task.nextCheckAt)
       }));
@@ -46,6 +48,12 @@ Page({
   goCreateTask() {
     wx.navigateTo({
       url: "/pages/task-form/task-form"
+    });
+  },
+
+  goEvents() {
+    wx.navigateTo({
+      url: "/pages/events/events"
     });
   },
 

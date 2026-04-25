@@ -1,15 +1,5 @@
 <view class="page">
   <view class="card">
-    <!-- Task name -->
-    <view class="section-title">基本信息</view>
-    <t-input
-      label="任务名称"
-      placeholder="例如：济南飞昆明五一"
-      value="{{form.name}}"
-      bind:change="onInputChange"
-      data-field="name"
-    />
-
     <!-- Route -->
     <view style="margin-top: 24rpx;">
       <view class="field-label">出发城市</view>
