@@ -95,6 +95,11 @@ Page({
     if (query.id) {
       this.setData({ isEdit: true, taskId: query.id });
       this.loadTask(query.id);
+    } else {
+      const savedToken = wx.getStorageSync("pushplus_token");
+      if (savedToken) {
+        this.setData({ "form.pushplusToken": savedToken });
+      }
     }
   },
 
@@ -263,6 +268,10 @@ Page({
 
     this.setData({ submitting: true });
     try {
+      if (form.pushplusToken) {
+        wx.setStorageSync("pushplus_token", form.pushplusToken);
+      }
+
       if (isEdit) {
         await request({
           url: `/tasks/${taskId}`,
