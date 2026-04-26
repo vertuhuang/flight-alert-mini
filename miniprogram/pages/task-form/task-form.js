@@ -83,11 +83,10 @@ Page({
       pushplusToken: "",
       active: true
     },
-    departDateTags: [],
-    returnDateTags: [],
-    showDepartDatePicker: false,
-    showReturnDatePicker: false,
-    datePickerValue: "",
+    departDateLabel: "",
+    departDateValue: "",
+    returnDateLabel: "",
+    returnDateValue: "",
     submitting: false
   },
 
@@ -109,13 +108,15 @@ Page({
       const flightWayIndex = task.flightWay === "Roundtrip" ? 1 : 0;
       const departDates = task.departDates || [];
       const returnDates = task.returnDates || [];
+      const departDate = departDates[0] || "";
+      const returnDate = returnDates[0] || "";
       this.setData({
         flightWayIndex,
         form: {
           placeFrom: task.placeFrom || "",
           placeTo: task.placeTo || "",
-          departDates: departDates.join(","),
-          returnDates: returnDates.join(","),
+          departDates: departDate,
+          returnDates: returnDate,
           threshold: String(task.threshold || 50),
           targetPrice: task.targetPrice ? String(task.targetPrice) : "",
           notifyOnDrop: task.notifyOnDrop !== false,
@@ -123,8 +124,10 @@ Page({
           pushplusToken: task.pushplusToken || "",
           active: task.active !== false
         },
-        departDateTags: departDates.map((d) => ({ code: d, label: formatDateShort(d) })),
-        returnDateTags: returnDates.map((d) => ({ code: d, label: formatDateShort(d) }))
+        departDateLabel: departDate ? formatDateShort(departDate) : "",
+        departDateValue: departDate ? `${departDate.slice(0, 4)}-${departDate.slice(4, 6)}-${departDate.slice(6, 8)}` : "",
+        returnDateLabel: returnDate ? formatDateShort(returnDate) : "",
+        returnDateValue: returnDate ? `${returnDate.slice(0, 4)}-${returnDate.slice(4, 6)}-${returnDate.slice(6, 8)}` : ""
       });
     } catch (error) {
       wx.showToast({ title: "加载任务失败", icon: "none" });
@@ -152,32 +155,14 @@ Page({
     this.setData({ flightWayIndex: index });
   },
 
-  openDepartDatePicker() {
-    const today = new Date();
-    const value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    this.setData({ showDepartDatePicker: true, datePickerValue: value });
-  },
-
-  openReturnDatePicker() {
-    const today = new Date();
-    const value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    this.setData({ showReturnDatePicker: true, datePickerValue: value });
-  },
-
   onDepartDatePick(e) {
     const dateValue = e.detail.value;
     if (!dateValue) return;
     const code = dateValue.replace(/-/g, "");
-    const { departDateTags } = this.data;
-    if (departDateTags.some((t) => t.code === code)) {
-      this.setData({ showDepartDatePicker: false });
-      return;
-    }
-    const newTags = [...departDateTags, { code, label: formatDateShort(code) }].sort((a, b) => a.code.localeCompare(b.code));
     this.setData({
-      departDateTags: newTags,
-      "form.departDates": newTags.map((t) => t.code).join(","),
-      showDepartDatePicker: false
+      departDateLabel: formatDateShort(code),
+      departDateValue: dateValue,
+      "form.departDates": code
     });
   },
 
@@ -185,34 +170,10 @@ Page({
     const dateValue = e.detail.value;
     if (!dateValue) return;
     const code = dateValue.replace(/-/g, "");
-    const { returnDateTags } = this.data;
-    if (returnDateTags.some((t) => t.code === code)) {
-      this.setData({ showReturnDatePicker: false });
-      return;
-    }
-    const newTags = [...returnDateTags, { code, label: formatDateShort(code) }].sort((a, b) => a.code.localeCompare(b.code));
     this.setData({
-      returnDateTags: newTags,
-      "form.returnDates": newTags.map((t) => t.code).join(","),
-      showReturnDatePicker: false
-    });
-  },
-
-  removeDepartDate(e) {
-    const code = e.currentTarget.dataset.code;
-    const newTags = this.data.departDateTags.filter((t) => t.code !== code);
-    this.setData({
-      departDateTags: newTags,
-      "form.departDates": newTags.map((t) => t.code).join(",")
-    });
-  },
-
-  removeReturnDate(e) {
-    const code = e.currentTarget.dataset.code;
-    const newTags = this.data.returnDateTags.filter((t) => t.code !== code);
-    this.setData({
-      returnDateTags: newTags,
-      "form.returnDates": newTags.map((t) => t.code).join(",")
+      returnDateLabel: formatDateShort(code),
+      returnDateValue: dateValue,
+      "form.returnDates": code
     });
   },
 

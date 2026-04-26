@@ -35,45 +35,16 @@
 
     <!-- Dates -->
     <view style="margin-top: 24rpx;">
-      <view class="field-label">出发日期</view>
-      <view class="date-tags">
-        <view wx:for="{{departDateTags}}" wx:key="code" class="date-tag">
-          <text>{{item.label}}</text>
-          <text class="date-tag__remove" data-code="{{item.code}}" bindtap="removeDepartDate">✕</text>
-        </view>
-        <view class="date-tag date-tag--add" bindtap="openDepartDatePicker">
-          <text>+ 添加</text>
-        </view>
-      </view>
+      <picker mode="date" value="{{departDateValue}}" bindchange="onDepartDatePick">
+        <t-cell title="出发日期" note="{{departDateLabel || '请选择'}}" arrow />
+      </picker>
     </view>
 
     <view wx:if="{{flightWayIndex === 1}}" style="margin-top: 16rpx;">
-      <view class="field-label">返程日期</view>
-      <view class="date-tags">
-        <view wx:for="{{returnDateTags}}" wx:key="code" class="date-tag">
-          <text>{{item.label}}</text>
-          <text class="date-tag__remove" data-code="{{item.code}}" bindtap="removeReturnDate">✕</text>
-        </view>
-        <view class="date-tag date-tag--add" bindtap="openReturnDatePicker">
-          <text>+ 添加</text>
-        </view>
-      </view>
+      <picker mode="date" value="{{returnDateValue}}" bindchange="onReturnDatePick">
+        <t-cell title="返程日期" note="{{returnDateLabel || '请选择'}}" arrow />
+      </picker>
     </view>
-
-    <!-- Date Pickers -->
-    <picker
-      mode="date"
-      value="{{datePickerValue}}"
-      bindchange="onDepartDatePick"
-      wx:if="{{showDepartDatePicker}}"
-    />
-
-    <picker
-      mode="date"
-      value="{{datePickerValue}}"
-      bindchange="onReturnDatePick"
-      wx:if="{{showReturnDatePicker}}"
-    />
   </view>
 
   <!-- Monitor strategy -->
