@@ -36,64 +36,89 @@
     <!-- Dates -->
     <view style="margin-top: 24rpx;">
       <view class="field-label">出发日期</view>
-      <t-textarea
-        placeholder="多个日期用逗号分隔，如 20260501,20260502"
-        value="{{form.departDates}}"
-        bind:change="onInputChange"
-        data-field="departDates"
-        maxlength="{{200}}"
-        autosize
-      />
+      <view class="date-tags">
+        <view wx:for="{{departDateTags}}" wx:key="code" class="date-tag">
+          <text>{{item.label}}</text>
+          <text class="date-tag__remove" data-code="{{item.code}}" bindtap="removeDepartDate">✕</text>
+        </view>
+        <view class="date-tag date-tag--add" bindtap="openDepartDatePicker">
+          <text>+ 添加</text>
+        </view>
+      </view>
     </view>
 
     <view wx:if="{{flightWayIndex === 1}}" style="margin-top: 16rpx;">
       <view class="field-label">返程日期</view>
-      <t-textarea
-        placeholder="多个日期用逗号分隔"
-        value="{{form.returnDates}}"
-        bind:change="onInputChange"
-        data-field="returnDates"
-        maxlength="{{200}}"
-        autosize
-      />
+      <view class="date-tags">
+        <view wx:for="{{returnDateTags}}" wx:key="code" class="date-tag">
+          <text>{{item.label}}</text>
+          <text class="date-tag__remove" data-code="{{item.code}}" bindtap="removeReturnDate">✕</text>
+        </view>
+        <view class="date-tag date-tag--add" bindtap="openReturnDatePicker">
+          <text>+ 添加</text>
+        </view>
+      </view>
     </view>
+
+    <!-- Date Pickers -->
+    <t-popup visible="{{showDepartDatePicker}}" placement="bottom" bind:visible-change="cancelDepartDatePicker">
+      <t-date-time-picker
+        mode="date"
+        title="选择出发日期"
+        value="{{datePickerValue}}"
+        bind:pick="onDepartDatePick"
+        bind:confirm="confirmDepartDate"
+        bind:cancel="cancelDepartDatePicker"
+      />
+    </t-popup>
+
+    <t-popup visible="{{showReturnDatePicker}}" placement="bottom" bind:visible-change="cancelReturnDatePicker">
+      <t-date-time-picker
+        mode="date"
+        title="选择返程日期"
+        value="{{datePickerValue}}"
+        bind:pick="onReturnDatePick"
+        bind:confirm="confirmReturnDate"
+        bind:cancel="cancelReturnDatePicker"
+      />
+    </t-popup>
   </view>
 
   <!-- Monitor strategy -->
   <view class="card">
     <view class="section-title">监控策略</view>
 
-    <t-input
-      label="变动阈值"
-      placeholder="价格变动多少元时通知"
-      type="number"
-      value="{{form.threshold}}"
-      bind:change="onInputChange"
-      data-field="threshold"
-      suffix="元"
-    />
+    <view style="margin-left: -32rpx; margin-right: -32rpx;">
+      <t-input
+        label="变动阈值"
+        placeholder="价格变动多少元时通知"
+        type="number"
+        value="{{form.threshold}}"
+        bind:change="onInputChange"
+        data-field="threshold"
+        suffix="元"
+      />
 
-    <t-input
-      label="目标价格"
-      placeholder="低于此价格时通知（可选）"
-      type="number"
-      value="{{form.targetPrice}}"
-      bind:change="onInputChange"
-      data-field="targetPrice"
-      suffix="元"
-    />
+      <t-input
+        label="目标价格"
+        placeholder="低于此价格时通知（可选）"
+        type="number"
+        value="{{form.targetPrice}}"
+        bind:change="onInputChange"
+        data-field="targetPrice"
+        suffix="元"
+      />
 
-    <t-input
-      label="检查间隔"
-      placeholder="多久检查一次价格"
-      type="number"
-      value="{{form.checkIntervalSec}}"
-      bind:change="onInputChange"
-      data-field="checkIntervalSec"
-      suffix="秒"
-    />
+      <t-input
+        label="检查间隔"
+        placeholder="多久检查一次价格"
+        type="number"
+        value="{{form.checkIntervalSec}}"
+        bind:change="onInputChange"
+        data-field="checkIntervalSec"
+        suffix="秒"
+      />
 
-    <view style="margin-top: 16rpx;">
       <t-cell title="仅降价时通知" bordered="{{false}}">
         <t-switch
           slot="note"

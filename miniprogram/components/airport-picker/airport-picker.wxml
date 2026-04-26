@@ -1,0 +1,82 @@
+<view class="picker">
+  <!-- Trigger -->
+  <view class="picker-trigger" bindtap="open">
+    <view class="picker-trigger__content">
+      <view class="picker-trigger__value {{!value ? 'picker-trigger__placeholder' : ''}}">
+        {{displayText || placeholder}}
+      </view>
+    </view>
+    <view class="picker-trigger__arrow">▸</view>
+  </view>
+
+  <!-- Popup -->
+  <view class="picker-popup {{visible ? 'picker-popup--show' : ''}}" catchtouchmove="noop">
+    <view class="picker-mask" bindtap="close"></view>
+    <view class="picker-panel">
+      <!-- Header -->
+      <view class="picker-header">
+        <view class="picker-header__cancel" bindtap="close">取消</view>
+        <view class="picker-header__title">{{label}}</view>
+        <view class="picker-header__confirm" bindtap="confirm">确定</view>
+      </view>
+
+      <!-- Search -->
+      <view class="picker-search">
+        <input
+          class="picker-search__input"
+          placeholder="搜索城市/机场/代码"
+          value="{{keyword}}"
+          bindinput="onSearch"
+          confirm-type="search"
+        />
+      </view>
+
+      <!-- Body -->
+      <view class="picker-body">
+        <!-- Airport List -->
+        <scroll-view
+          class="picker-list"
+          scroll-y
+          scroll-into-view="{{scrollInto}}"
+          scroll-with-animation
+        >
+          <block wx:for="{{groups}}" wx:key="letter">
+            <view class="picker-group" id="letter-{{item.letter}}">
+              <view class="picker-group__header">{{item.letter}}</view>
+              <block wx:for="{{item.items}}" wx:for-item="airport" wx:key="code">
+                <view
+                  class="picker-item {{selectedCode === airport.code ? 'picker-item--selected' : ''}}"
+                  data-code="{{airport.code}}"
+                  data-city="{{airport.city}}"
+                  bindtap="onSelect"
+                >
+                  <view class="picker-item__main">
+                    <text class="picker-item__city">{{airport.city}}</text>
+                    <text class="picker-item__code">{{airport.code}}</text>
+                  </view>
+                  <view class="picker-item__airports">{{airport.airports}}</view>
+                  <view wx:if="{{selectedCode === airport.code}}" class="picker-item__check">✓</view>
+                </view>
+              </block>
+            </view>
+          </block>
+
+          <view wx:if="{{!groups.length}}" class="picker-empty">
+            未找到匹配的机场
+          </view>
+        </scroll-view>
+
+        <!-- Alphabet Sidebar -->
+        <view class="picker-sidebar" catchtouchmove="noop">
+          <view
+            wx:for="{{sidebarLetters}}"
+            wx:key="*this"
+            class="picker-sidebar__item {{activeLetter === item ? 'picker-sidebar__item--active' : ''}}"
+            data-letter="{{item}}"
+            bindtap="onLetterTap"
+          >{{item}}</view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

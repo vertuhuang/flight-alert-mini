@@ -1,5 +1,6 @@
 const { request } = require("../../utils/request");
 const { getCityByCode } = require("../../utils/airports");
+const { formatDateShort } = require("../../utils/format");
 
 const FLIGHT_WAYS = ["Oneway", "Roundtrip"];
 const FLIGHT_WAY_LABELS = ["单程", "往返"];
@@ -82,6 +83,11 @@ Page({
       pushplusToken: "",
       active: true
     },
+    departDateTags: [],
+    returnDateTags: [],
+    showDepartDatePicker: false,
+    showReturnDatePicker: false,
+    datePickerValue: "",
     submitting: false
   },
 
@@ -96,20 +102,24 @@ Page({
     try {
       const task = await request({ url: `/tasks/${id}` });
       const flightWayIndex = task.flightWay === "Roundtrip" ? 1 : 0;
+      const departDates = task.departDates || [];
+      const returnDates = task.returnDates || [];
       this.setData({
         flightWayIndex,
         form: {
           placeFrom: task.placeFrom || "",
           placeTo: task.placeTo || "",
-          departDates: (task.departDates || []).join(","),
-          returnDates: (task.returnDates || []).join(","),
+          departDates: departDates.join(","),
+          returnDates: returnDates.join(","),
           threshold: String(task.threshold || 50),
           targetPrice: task.targetPrice ? String(task.targetPrice) : "",
           notifyOnDrop: task.notifyOnDrop !== false,
           checkIntervalSec: String(task.checkIntervalSec || 600),
           pushplusToken: task.pushplusToken || "",
           active: task.active !== false
-        }
+        },
+        departDateTags: departDates.map((d) => ({ code: d, label: formatDateShort(d) })),
+        returnDateTags: returnDates.map((d) => ({ code: d, label: formatDateShort(d) }))
       });
     } catch (error) {
       wx.showToast({ title: "加载任务失败", icon: "none" });
@@ -135,6 +145,86 @@ Page({
   onFlightWayConfirm(event) {
     const index = event.detail.value[0];
     this.setData({ flightWayIndex: index });
+  },
+
+  openDepartDatePicker() {
+    this.setData({ showDepartDatePicker: true, datePickerValue: "" });
+  },
+
+  openReturnDatePicker() {
+    this.setData({ showReturnDatePicker: true, datePickerValue: "" });
+  },
+
+  onDepartDatePick(e) {
+    this.setData({ datePickerValue: e.detail.value });
+  },
+
+  onReturnDatePick(e) {
+    this.setData({ datePickerValue: e.detail.value });
+  },
+
+  confirmDepartDate() {
+    const { datePickerValue, departDateTags, form } = this.data;
+    if (!datePickerValue) {
+      this.setData({ showDepartDatePicker: false });
+      return;
+    }
+    const code = datePickerValue.replace(/-/g, "");
+    if (departDateTags.some((t) => t.code === code)) {
+      this.setData({ showDepartDatePicker: false });
+      return;
+    }
+    const newTags = [...departDateTags, { code, label: formatDateShort(code) }].sort((a, b) => a.code.localeCompare(b.code));
+    this.setData({
+      departDateTags: newTags,
+      "form.departDates": newTags.map((t) => t.code).join(","),
+      showDepartDatePicker: false
+    });
+  },
+
+  confirmReturnDate() {
+    const { datePickerValue, returnDateTags, form } = this.data;
+    if (!datePickerValue) {
+      this.setData({ showReturnDatePicker: false });
+      return;
+    }
+    const code = datePickerValue.replace(/-/g, "");
+    if (returnDateTags.some((t) => t.code === code)) {
+      this.setData({ showReturnDatePicker: false });
+      return;
+    }
+    const newTags = [...returnDateTags, { code, label: formatDateShort(code) }].sort((a, b) => a.code.localeCompare(b.code));
+    this.setData({
+      returnDateTags: newTags,
+      "form.returnDates": newTags.map((t) => t.code).join(","),
+      showReturnDatePicker: false
+    });
+  },
+
+  removeDepartDate(e) {
+    const code = e.currentTarget.dataset.code;
+    const newTags = this.data.departDateTags.filter((t) => t.code !== code);
+    this.setData({
+      departDateTags: newTags,
+      "form.departDates": newTags.map((t) => t.code).join(",")
+    });
+  },
+
+  removeReturnDate(e) {
+    const code = e.currentTarget.dataset.code;
+    const newTags = this.data.returnDateTags.filter((t) => t.code !== code);
+    this.setData({
+      returnDateTags: newTags,
+      "form.returnDates": newTags.map((t) => t.code).join(",")
+    });
+  },
+
+  cancelDepartDatePicker() {
+    this.setData({ showDepartDatePicker: false });
+  },
+
+  cancelReturnDatePicker() {
+    this.setData({ showReturnDatePicker: false });
   },
 
   onNotifyDropChange(event) {
