@@ -61,27 +61,25 @@
     </view>
 
     <!-- Date Pickers -->
-    <t-popup visible="{{showDepartDatePicker}}" placement="bottom" bind:visible-change="cancelDepartDatePicker">
-      <t-date-time-picker
-        mode="date"
-        title="选择出发日期"
-        value="{{datePickerValue}}"
-        bind:pick="onDepartDatePick"
-        bind:confirm="confirmDepartDate"
-        bind:cancel="cancelDepartDatePicker"
-      />
-    </t-popup>
+    <t-date-time-picker
+      visible="{{showDepartDatePicker}}"
+      mode="date"
+      title="选择出发日期"
+      value="{{datePickerValue}}"
+      bind:pick="onDepartDatePick"
+      bind:confirm="confirmDepartDate"
+      bind:cancel="cancelDepartDatePicker"
+    />
 
-    <t-popup visible="{{showReturnDatePicker}}" placement="bottom" bind:visible-change="cancelReturnDatePicker">
-      <t-date-time-picker
-        mode="date"
-        title="选择返程日期"
-        value="{{datePickerValue}}"
-        bind:pick="onReturnDatePick"
-        bind:confirm="confirmReturnDate"
-        bind:cancel="cancelReturnDatePicker"
-      />
-    </t-popup>
+    <t-date-time-picker
+      visible="{{showReturnDatePicker}}"
+      mode="date"
+      title="选择返程日期"
+      value="{{datePickerValue}}"
+      bind:pick="onReturnDatePick"
+      bind:confirm="confirmReturnDate"
+      bind:cancel="cancelReturnDatePicker"
+    />
   </view>
 
   <!-- Monitor strategy -->
@@ -134,16 +132,16 @@
     <view class="section-title">通知方式</view>
     <view class="section-desc">配置 PushPlus Token 后，价格变动会推送到微信</view>
 
-    <t-textarea
-      placeholder="PushPlus Token（不填则仅在小程序内记录）"
-      value="{{form.pushplusToken}}"
-      bind:change="onInputChange"
-      data-field="pushplusToken"
-      maxlength="{{200}}"
-      autosize
-    />
+    <view style="margin-left: -32rpx; margin-right: -32rpx;">
+      <t-textarea
+        placeholder="PushPlus Token（不填则仅在小程序内记录）"
+        value="{{form.pushplusToken}}"
+        bind:change="onInputChange"
+        data-field="pushplusToken"
+        maxlength="{{200}}"
+        autosize
+      />
 
-    <view style="margin-top: 16rpx;">
       <t-cell title="创建后立即启用" bordered="{{false}}">
         <t-switch
           slot="note"
