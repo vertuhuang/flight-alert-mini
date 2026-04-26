@@ -1,20 +1,4 @@
 <view class="page">
-  <!-- Header -->
-  <view class="card" style="display: flex; align-items: center; justify-content: space-between;">
-    <view>
-      <view style="font-size: 36rpx; font-weight: 800; color: #0f172a;">机票价格提醒</view>
-      <view class="muted" style="margin-top: 8rpx;">{{healthText}}</view>
-    </view>
-    <view style="display: flex; gap: 12rpx;">
-      <t-button t-class="event-btn" theme="light" size="small" icon="notification" bind:tap="goEvents">
-        通知
-      </t-button>
-      <t-button theme="primary" size="small" icon="add" bind:tap="goCreateTask">
-        新建
-      </t-button>
-    </view>
-  </view>
-
   <!-- Task list -->
   <block wx:if="{{tasks.length}}">
     <block wx:for="{{tasks}}" wx:key="id">

@@ -2,15 +2,15 @@
   "pages": [
     "pages/index/index",
     "pages/task-form/task-form",
-    "pages/task-detail/task-detail"
+    "pages/task-detail/task-detail",
+    "pages/events/events"
   ],
   "window": {
     "navigationBarTitleText": "航班提醒",
-    "navigationBarBackgroundColor": "#0f172a",
-    "navigationBarTextStyle": "white",
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTextStyle": "black",
     "backgroundColor": "#f8fafc",
     "backgroundTextStyle": "light"
   },
-  "style": "v2",
   "sitemapLocation": "sitemap.json"
 }
