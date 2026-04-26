@@ -1,67 +1,23 @@
 const { request } = require("../../utils/request");
-const { getCityByCode } = require("../../utils/airports");
+const { getCityByCode, AIRPORTS } = require("../../utils/airports");
 const { formatDateShort } = require("../../utils/format");
 
 const FLIGHT_WAYS = ["Oneway", "Roundtrip"];
 const FLIGHT_WAY_LABELS = ["单程", "往返"];
 
-/**
- * 根据日期代码数组生成中文日期描述
- * ["20260501"] → "5月1日"
- * ["20260501","20260502"] → "5月1、2日"
- * ["20260501","20260601"] → "5月1日、6月1日"
- */
-function formatDatesShort(dateCodes) {
-  if (!dateCodes || dateCodes.length === 0) return "";
-  const parts = dateCodes.map((d) => ({
-    month: d.slice(4, 6).replace(/^0/, ""),
-    day: d.slice(6, 8).replace(/^0/, "")
-  }));
-  // 同月合并
-  const monthGroups = {};
-  parts.forEach((p) => {
-    if (!monthGroups[p.month]) monthGroups[p.month] = [];
-    monthGroups[p.month].push(p.day);
-  });
-  const sortedMonths = Object.keys(monthGroups).sort((a, b) => a - b);
-  return sortedMonths
-    .map((m) => `${m}月${monthGroups[m].join("、")}日`)
-    .join("、");
-}
+const AIRPORT_OPTIONS = AIRPORTS.map((a) => ({ label: `${a.city} (${a.code})`, value: a.code }));
 
-/**
- * 自动生成任务名称
- * 单程："5月1日深圳飞北京"
- * 往返："5月1-8日深圳飞北京往返"
- */
 function generateTaskName(form, flightWayIndex) {
-  const departDates = (form.departDates || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const departDate = form.departDates || "";
   const fromCity = getCityByCode(form.placeFrom) || form.placeFrom;
   const toCity = getCityByCode(form.placeTo) || form.placeTo;
 
-  if (departDates.length === 0 || !fromCity || !toCity) return "";
+  if (!departDate || !fromCity || !toCity) return "";
 
-  const first = departDates[0];
-  const last = departDates[departDates.length - 1];
-  const m1 = first.slice(4, 6).replace(/^0/, "");
-  const d1 = first.slice(6, 8).replace(/^0/, "");
-  const m2 = last.slice(4, 6).replace(/^0/, "");
-  const d2 = last.slice(6, 8).replace(/^0/, "");
-
-  let dateStr;
-  if (departDates.length === 1) {
-    dateStr = `${m1}月${d1}日`;
-  } else if (m1 === m2) {
-    dateStr = `${m1}月${d1}-${d2}日`;
-  } else {
-    dateStr = `${m1}月${d1}日-${m2}月${d2}日`;
-  }
-
+  const m = departDate.slice(4, 6).replace(/^0/, "");
+  const d = departDate.slice(6, 8).replace(/^0/, "");
   const isRound = FLIGHT_WAYS[flightWayIndex || 0] === "Roundtrip";
-  return `${dateStr}${fromCity}飞${toCity}${isRound ? "往返" : ""}`;
+  return `${m}月${d}日${fromCity}飞${toCity}${isRound ? "往返" : ""}`;
 }
 
 Page({
@@ -71,6 +27,7 @@ Page({
     flightWayLabels: FLIGHT_WAY_LABELS,
     flightWayIndex: 0,
     flightWayOptions: [FLIGHT_WAY_LABELS],
+    airportOptions: AIRPORT_OPTIONS,
     form: {
       placeFrom: "",
       placeTo: "",
@@ -83,10 +40,19 @@ Page({
       pushplusToken: "",
       active: true
     },
+    placeFromText: "",
+    placeToText: "",
+    fromPickerIndex: 0,
+    toPickerIndex: 0,
+    showFromPicker: false,
+    showToPicker: false,
+    showFlightWayPicker: false,
     departDateLabel: "",
     departDateValue: "",
     returnDateLabel: "",
     returnDateValue: "",
+    showDepartDatePicker: false,
+    showReturnDatePicker: false,
     submitting: false
   },
 
@@ -108,8 +74,11 @@ Page({
       const flightWayIndex = task.flightWay === "Roundtrip" ? 1 : 0;
       const departDates = task.departDates || [];
       const returnDates = task.returnDates || [];
-      const departDate = departDates[0] || "";
-      const returnDate = returnDates[0] || "";
+      const departDate = Array.isArray(departDates) ? departDates[0] || "" : departDates;
+      const returnDate = Array.isArray(returnDates) ? returnDates[0] || "" : returnDates;
+      const fromIndex = AIRPORT_OPTIONS.findIndex((o) => o.value === task.placeFrom);
+      const toIndex = AIRPORT_OPTIONS.findIndex((o) => o.value === task.placeTo);
+
       this.setData({
         flightWayIndex,
         form: {
@@ -124,6 +93,10 @@ Page({
           pushplusToken: task.pushplusToken || "",
           active: task.active !== false
         },
+        placeFromText: task.placeFrom ? getCityByCode(task.placeFrom) || task.placeFrom : "",
+        placeToText: task.placeTo ? getCityByCode(task.placeTo) || task.placeTo : "",
+        fromPickerIndex: fromIndex >= 0 ? fromIndex : 0,
+        toPickerIndex: toIndex >= 0 ? toIndex : 0,
         departDateLabel: departDate ? formatDateShort(departDate) : "",
         departDateValue: departDate ? `${departDate.slice(0, 4)}-${departDate.slice(4, 6)}-${departDate.slice(6, 8)}` : "",
         returnDateLabel: returnDate ? formatDateShort(returnDate) : "",
@@ -142,39 +115,96 @@ Page({
     });
   },
 
-  onFromChange(e) {
-    this.setData({ "form.placeFrom": e.detail.code });
+  openFromPicker() {
+    this.setData({ showFromPicker: true });
   },
 
-  onToChange(e) {
-    this.setData({ "form.placeTo": e.detail.code });
+  openToPicker() {
+    this.setData({ showToPicker: true });
+  },
+
+  onAirportConfirm(e) {
+    const key = e.currentTarget.dataset.key;
+    const index = e.detail.value[0];
+    const option = AIRPORT_OPTIONS[index];
+    if (!option) return;
+    if (key === "from") {
+      this.setData({
+        "form.placeFrom": option.value,
+        placeFromText: getCityByCode(option.value) || option.value,
+        fromPickerIndex: index,
+        showFromPicker: false
+      });
+    } else {
+      this.setData({
+        "form.placeTo": option.value,
+        placeToText: getCityByCode(option.value) || option.value,
+        toPickerIndex: index,
+        showToPicker: false
+      });
+    }
+  },
+
+  onAirportCancel(e) {
+    const key = e.currentTarget.dataset.key;
+    if (key === "from") {
+      this.setData({ showFromPicker: false });
+    } else {
+      this.setData({ showToPicker: false });
+    }
+  },
+
+  openFlightWayPicker() {
+    this.setData({ showFlightWayPicker: true });
   },
 
   onFlightWayConfirm(event) {
     const index = event.detail.value[0];
-    this.setData({ flightWayIndex: index });
+    this.setData({ flightWayIndex: index, showFlightWayPicker: false });
   },
 
-  onDepartDatePick(e) {
+  onFlightWayCancel() {
+    this.setData({ showFlightWayPicker: false });
+  },
+
+  openDepartDatePicker() {
+    this.setData({ showDepartDatePicker: true });
+  },
+
+  openReturnDatePicker() {
+    this.setData({ showReturnDatePicker: true });
+  },
+
+  onDepartDateConfirm(e) {
     const dateValue = e.detail.value;
     if (!dateValue) return;
     const code = dateValue.replace(/-/g, "");
     this.setData({
       departDateLabel: formatDateShort(code),
       departDateValue: dateValue,
-      "form.departDates": code
+      "form.departDates": code,
+      showDepartDatePicker: false
     });
   },
 
-  onReturnDatePick(e) {
+  onDepartDateCancel() {
+    this.setData({ showDepartDatePicker: false });
+  },
+
+  onReturnDateConfirm(e) {
     const dateValue = e.detail.value;
     if (!dateValue) return;
     const code = dateValue.replace(/-/g, "");
     this.setData({
       returnDateLabel: formatDateShort(code),
       returnDateValue: dateValue,
-      "form.returnDates": code
+      "form.returnDates": code,
+      showReturnDatePicker: false
     });
+  },
+
+  onReturnDateCancel() {
+    this.setData({ showReturnDatePicker: false });
   },
 
   onNotifyDropChange(event) {
@@ -199,7 +229,6 @@ Page({
       return;
     }
 
-    // 自动生成任务名称
     const autoName = generateTaskName(form, flightWayIndex);
 
     const payload = {

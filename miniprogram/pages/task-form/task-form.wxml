@@ -1,49 +1,28 @@
 <view class="page">
   <view class="card">
-    <!-- Route -->
-    <view style="margin-top: 24rpx;">
-      <view class="field-label">出发城市</view>
-      <airport-picker
-        label="出发城市"
-        placeholder="选择出发城市"
-        value="{{form.placeFrom}}"
-        bind:change="onFromChange"
-      />
-    </view>
+    <view class="section-title">航线信息</view>
 
-    <view style="margin-top: 16rpx;">
-      <view class="field-label">到达城市</view>
-      <airport-picker
-        label="到达城市"
-        placeholder="选择到达城市"
-        value="{{form.placeTo}}"
-        bind:change="onToChange"
-      />
-    </view>
+    <view style="margin-left: -32rpx; margin-right: -32rpx;">
+      <t-cell title="出发城市" note="{{form.placeFrom ? placeFromText : '请选择'}}" arrow bindtap="openFromPicker" />
+      <t-cell title="到达城市" note="{{form.placeTo ? placeToText : '请选择'}}" arrow bindtap="openToPicker" />
 
-    <!-- Flight way -->
-    <view style="margin-top: 24rpx;">
-      <t-picker
-        title="航程类型"
-        value="{{flightWayIndex}}"
-        options="{{flightWayOptions}}"
-        bind:confirm="onFlightWayConfirm"
-      >
-        <t-cell title="航程类型" note="{{flightWayLabels[flightWayIndex]}}" arrow />
+      <t-picker title="选择出发城市" visible="{{showFromPicker}}" value="{{[fromPickerIndex]}}" data-key="from" bind:confirm="onAirportConfirm" bind:cancel="onAirportCancel">
+        <t-picker-item options="{{airportOptions}}"></t-picker-item>
       </t-picker>
-    </view>
+      <t-picker title="选择到达城市" visible="{{showToPicker}}" value="{{[toPickerIndex]}}" data-key="to" bind:confirm="onAirportConfirm" bind:cancel="onAirportCancel">
+        <t-picker-item options="{{airportOptions}}"></t-picker-item>
+      </t-picker>
 
-    <!-- Dates -->
-    <view style="margin-top: 24rpx;">
-      <picker mode="date" value="{{departDateValue}}" bindchange="onDepartDatePick">
-        <t-cell title="出发日期" note="{{departDateLabel || '请选择'}}" arrow />
-      </picker>
-    </view>
+      <t-cell title="航程类型" note="{{flightWayLabels[flightWayIndex]}}" arrow bindtap="openFlightWayPicker" />
+      <t-picker title="选择航程类型" visible="{{showFlightWayPicker}}" value="{{[flightWayIndex]}}" bind:confirm="onFlightWayConfirm" bind:cancel="onFlightWayCancel">
+        <t-picker-item options="{{flightWayOptions[0]}}"></t-picker-item>
+      </t-picker>
 
-    <view wx:if="{{flightWayIndex === 1}}" style="margin-top: 16rpx;">
-      <picker mode="date" value="{{returnDateValue}}" bindchange="onReturnDatePick">
-        <t-cell title="返程日期" note="{{returnDateLabel || '请选择'}}" arrow />
-      </picker>
+      <t-cell title="出发日期" note="{{departDateLabel || '请选择'}}" arrow bindtap="openDepartDatePicker" />
+      <t-date-time-picker visible="{{showDepartDatePicker}}" mode="date" title="选择出发日期" value="{{departDateValue}}" bind:confirm="onDepartDateConfirm" bind:cancel="onDepartDateCancel" />
+
+      <t-cell wx:if="{{flightWayIndex === 1}}" title="返程日期" note="{{returnDateLabel || '请选择'}}" arrow bindtap="openReturnDatePicker" />
+      <t-date-time-picker wx:if="{{flightWayIndex === 1}}" visible="{{showReturnDatePicker}}" mode="date" title="选择返程日期" value="{{returnDateValue}}" bind:confirm="onReturnDateConfirm" bind:cancel="onReturnDateCancel" />
     </view>
   </view>
 
@@ -52,42 +31,11 @@
     <view class="section-title">监控策略</view>
 
     <view style="margin-left: -32rpx; margin-right: -32rpx;">
-      <t-input
-        label="变动阈值"
-        placeholder="价格变动多少元时通知"
-        type="number"
-        value="{{form.threshold}}"
-        bind:change="onInputChange"
-        data-field="threshold"
-        suffix="元"
-      />
-
-      <t-input
-        label="目标价格"
-        placeholder="低于此价格时通知（可选）"
-        type="number"
-        value="{{form.targetPrice}}"
-        bind:change="onInputChange"
-        data-field="targetPrice"
-        suffix="元"
-      />
-
-      <t-input
-        label="检查间隔"
-        placeholder="多久检查一次价格"
-        type="number"
-        value="{{form.checkIntervalSec}}"
-        bind:change="onInputChange"
-        data-field="checkIntervalSec"
-        suffix="秒"
-      />
-
+      <t-input label="变动阈值" placeholder="价格变动多少元时通知" type="number" value="{{form.threshold}}" bind:change="onInputChange" data-field="threshold" suffix="元" />
+      <t-input label="目标价格" placeholder="低于此价格时通知（可选）" type="number" value="{{form.targetPrice}}" bind:change="onInputChange" data-field="targetPrice" suffix="元" />
+      <t-input label="检查间隔" placeholder="多久检查一次价格" type="number" value="{{form.checkIntervalSec}}" bind:change="onInputChange" data-field="checkIntervalSec" suffix="秒" />
       <t-cell title="仅降价时通知" bordered="{{false}}">
-        <t-switch
-          slot="note"
-          value="{{form.notifyOnDrop}}"
-          bind:change="onNotifyDropChange"
-        />
+        <t-switch slot="note" value="{{form.notifyOnDrop}}" bind:change="onNotifyDropChange" />
       </t-cell>
     </view>
   </view>
@@ -98,34 +46,16 @@
     <view class="section-desc">配置 PushPlus Token 后，价格变动会推送到微信</view>
 
     <view style="margin-left: -32rpx; margin-right: -32rpx;">
-      <t-textarea
-        placeholder="PushPlus Token（不填则仅在小程序内记录）"
-        value="{{form.pushplusToken}}"
-        bind:change="onInputChange"
-        data-field="pushplusToken"
-        maxlength="{{200}}"
-        autosize
-      />
-
+      <t-textarea placeholder="PushPlus Token（不填则仅在小程序内记录）" value="{{form.pushplusToken}}" bind:change="onInputChange" data-field="pushplusToken" maxlength="{{200}}" autosize />
       <t-cell title="创建后立即启用" bordered="{{false}}">
-        <t-switch
-          slot="note"
-          value="{{form.active}}"
-          bind:change="onActiveChange"
-        />
+        <t-switch slot="note" value="{{form.active}}" bind:change="onActiveChange" />
       </t-cell>
     </view>
   </view>
 
   <!-- Submit -->
   <view style="margin-top: 32rpx; padding-bottom: 40rpx;">
-    <t-button
-      theme="primary"
-      size="large"
-      block
-      loading="{{submitting}}"
-      bind:tap="submit"
-    >
+    <t-button theme="primary" size="large" block loading="{{submitting}}" bind:tap="submit">
       {{isEdit ? '更新任务' : '创建任务'}}
     </t-button>
   </view>
