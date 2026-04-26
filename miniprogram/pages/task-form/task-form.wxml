@@ -61,24 +61,18 @@
     </view>
 
     <!-- Date Pickers -->
-    <t-date-time-picker
-      visible="{{showDepartDatePicker}}"
+    <picker
       mode="date"
-      title="选择出发日期"
       value="{{datePickerValue}}"
-      bind:pick="onDepartDatePick"
-      bind:confirm="confirmDepartDate"
-      bind:cancel="cancelDepartDatePicker"
+      bindchange="onDepartDatePick"
+      wx:if="{{showDepartDatePicker}}"
     />
 
-    <t-date-time-picker
-      visible="{{showReturnDatePicker}}"
+    <picker
       mode="date"
-      title="选择返程日期"
       value="{{datePickerValue}}"
-      bind:pick="onReturnDatePick"
-      bind:confirm="confirmReturnDate"
-      bind:cancel="cancelReturnDatePicker"
+      bindchange="onReturnDatePick"
+      wx:if="{{showReturnDatePicker}}"
     />
   </view>
 

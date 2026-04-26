@@ -153,28 +153,22 @@ Page({
   },
 
   openDepartDatePicker() {
-    this.setData({ showDepartDatePicker: true, datePickerValue: "" });
+    const today = new Date();
+    const value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    this.setData({ showDepartDatePicker: true, datePickerValue: value });
   },
 
   openReturnDatePicker() {
-    this.setData({ showReturnDatePicker: true, datePickerValue: "" });
+    const today = new Date();
+    const value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    this.setData({ showReturnDatePicker: true, datePickerValue: value });
   },
 
   onDepartDatePick(e) {
-    this.setData({ datePickerValue: e.detail.value });
-  },
-
-  onReturnDatePick(e) {
-    this.setData({ datePickerValue: e.detail.value });
-  },
-
-  confirmDepartDate() {
-    const { datePickerValue, departDateTags, form } = this.data;
-    if (!datePickerValue) {
-      this.setData({ showDepartDatePicker: false });
-      return;
-    }
-    const code = datePickerValue.replace(/-/g, "");
+    const dateValue = e.detail.value;
+    if (!dateValue) return;
+    const code = dateValue.replace(/-/g, "");
+    const { departDateTags } = this.data;
     if (departDateTags.some((t) => t.code === code)) {
       this.setData({ showDepartDatePicker: false });
       return;
@@ -187,13 +181,11 @@ Page({
     });
   },
 
-  confirmReturnDate() {
-    const { datePickerValue, returnDateTags, form } = this.data;
-    if (!datePickerValue) {
-      this.setData({ showReturnDatePicker: false });
-      return;
-    }
-    const code = datePickerValue.replace(/-/g, "");
+  onReturnDatePick(e) {
+    const dateValue = e.detail.value;
+    if (!dateValue) return;
+    const code = dateValue.replace(/-/g, "");
+    const { returnDateTags } = this.data;
     if (returnDateTags.some((t) => t.code === code)) {
       this.setData({ showReturnDatePicker: false });
       return;
@@ -222,14 +214,6 @@ Page({
       returnDateTags: newTags,
       "form.returnDates": newTags.map((t) => t.code).join(",")
     });
-  },
-
-  cancelDepartDatePicker() {
-    this.setData({ showDepartDatePicker: false });
-  },
-
-  cancelReturnDatePicker() {
-    this.setData({ showReturnDatePicker: false });
   },
 
   onNotifyDropChange(event) {
