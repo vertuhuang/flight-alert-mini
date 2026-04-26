@@ -66,25 +66,18 @@
     <view class="section-title">变价历史</view>
 
     <block wx:if="{{history.length}}">
-      <t-collapse>
-        <t-collapse-panel
-          wx:for="{{history}}"
-          wx:key="id"
-          header="{{item.checkedAtText}}"
-          note="{{item.summary && item.summary.minPrice ? '最低 ' + item.summary.minPrice + ' 元' : ''}}"
-        >
-          <block wx:if="{{item.changes.length}}">
-            <view wx:for="{{item.changes}}" wx:for-item="change" wx:key="key" class="change-item">
-              <text class="change-label">{{change.label}}</text>
-              <view class="change-badge change-badge--{{change.type}}">
-                {{change.type === 'rise' ? '上涨' : change.type === 'drop' ? '下降' : '首次'}}
-                <text wx:if="{{change.delta !== null}}"> {{change.deltaAbs}}元</text>
-              </view>
-            </view>
-          </block>
-          <view wx:else class="muted">本次无达到阈值的变化</view>
-        </t-collapse-panel>
-      </t-collapse>
+      <view wx:for="{{history}}" wx:key="id" class="history-item">
+        <view style="display: flex; justify-content: space-between; align-items: center;">
+          <text style="font-size: 26rpx; color: #64748b;">{{item.checkedAtText}}</text>
+          <text wx:if="{{item.summary && item.summary.minPrice}}" style="font-size: 26rpx; color: #0f172a; font-weight: 600;">最低 {{item.summary.minPrice}} 元</text>
+        </view>
+        <view wx:if="{{item.changes.length}}" style="margin-top: 8rpx; display: flex; flex-wrap: wrap; gap: 12rpx;">
+          <view wx:for="{{item.changes}}" wx:for-item="change" wx:key="key" class="change-badge change-badge--{{change.type}}">
+            {{change.label}} {{change.type === 'rise' ? '上涨' : change.type === 'drop' ? '下降' : '首次'}}
+            <text wx:if="{{change.delta !== null}}"> {{change.deltaAbs}}元</text>
+          </view>
+        </view>
+      </view>
     </block>
     <view wx:else class="empty-hint">还没有历史记录</view>
   </view>
