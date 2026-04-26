@@ -1,5 +1,5 @@
 const { request } = require("../../utils/request");
-const { formatDateTime, joinDates } = require("../../utils/format");
+const { formatDateTime, joinDates, joinDatesShort } = require("../../utils/format");
 const { getCityByCode } = require("../../utils/airports");
 
 Page({
@@ -47,11 +47,16 @@ Page({
         }))
       }));
 
+      const fromCity = getCityByCode(task.placeFrom) || task.placeFrom;
+      const toCity = getCityByCode(task.placeTo) || task.placeTo;
+      const datesShort = joinDatesShort(task.departDates);
+
       this.setData({
         task: {
           ...task,
-          placeFromText: getCityByCode(task.placeFrom),
-          placeToText: getCityByCode(task.placeTo),
+          placeFromText: fromCity,
+          placeToText: toCity,
+          headerTitle: `${fromCity} → ${toCity}（${datesShort}）`,
           departDatesText: joinDates(task.departDates),
           returnDatesText: joinDates(task.returnDates),
           lastCheckedText: formatDateTime(task.lastCheckedAt),

@@ -22,8 +22,21 @@ function joinDates(list) {
   return (list || []).map(formatDateCode).join(", ");
 }
 
+function formatDateShort(dateCode) {
+  if (!dateCode || dateCode.length !== 8) return dateCode || "";
+  const month = dateCode.slice(4, 6).replace(/^0/, "");
+  const day = dateCode.slice(6, 8).replace(/^0/, "");
+  return `${month}月${day}日`;
+}
+
+function joinDatesShort(list) {
+  return (list || []).map(formatDateShort).join("、");
+}
+
 module.exports = {
   formatDateCode,
   formatDateTime,
-  joinDates
+  joinDates,
+  formatDateShort,
+  joinDatesShort
 };

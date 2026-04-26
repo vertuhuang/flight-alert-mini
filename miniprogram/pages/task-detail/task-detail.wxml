@@ -2,14 +2,10 @@
   <!-- Task header -->
   <view class="card">
     <view style="display: flex; align-items: center; justify-content: space-between;">
-      <view style="font-size: 34rpx; font-weight: 800; color: #0f172a;">{{task.name}}</view>
+      <view style="font-size: 34rpx; font-weight: 800; color: #0f172a;">{{task.headerTitle}}</view>
       <t-tag theme="{{task.active ? 'primary' : 'default'}}" variant="light" size="medium">
         {{task.active ? '监控中' : '已暂停'}}
       </t-tag>
-    </view>
-
-    <view class="route-display" style="margin-top: 16rpx;">
-      {{task.placeFromText}}<text class="route-arrow">→</text>{{task.placeToText}}
     </view>
 
     <!-- Price -->
