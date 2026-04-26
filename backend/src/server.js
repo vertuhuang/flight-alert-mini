@@ -15,7 +15,7 @@ const notifier = new PushPlusNotifier();
 const monitorService = new MonitorService({ store, provider, notifier });
 
 function getTaskIdFromPath(pathname) {
-  const match = pathname.match(/^\/api\/tasks\/([^/]+)(?:\/(check-now|history))?$/);
+  const match = pathname.match(/^\/api\/tasks\/([^/]+)(?:\/(check-now|history|events|clear-unread))?$/);
   if (!match) {
     return null;
   }
@@ -43,6 +43,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, {
         ok: true,
         service: "flight-alert-mini-backend",
+        version: "v2-event-opt",
         now: new Date().toISOString()
       });
     }
@@ -56,6 +57,116 @@ const server = http.createServer(async (req, res) => {
       const body = await parseBody(req);
       const task = await monitorService.createTask(body);
       return sendJson(res, 201, task);
+    }
+
+    if (pathname === "/api/flight-prices" && req.method === "GET") {
+      const from = url.searchParams.get("from");
+      const to = url.searchParams.get("to");
+      const date = url.searchParams.get("date");
+      const flightWay = url.searchParams.get("flightWay") || "Oneway";
+
+      if (!from || !to || !date) {
+        return badRequest(res, "缺少必要参数：from, to, date");
+      }
+
+      if (!/^[A-Za-z]{3}$/.test(from) || !/^[A-Za-z]{3}$/.test(to)) {
+        return badRequest(res, "from/to 必须是 3 位 IATA 机场代码");
+      }
+
+      if (!/^\d{8}$/.test(date)) {
+        return badRequest(res, "date 必须是 YYYYMMDD 格式");
+      }
+
+      const result = await provider.fetchFlightPrices({
+        placeFrom: from.toUpperCase(),
+        placeTo: to.toUpperCase(),
+        departDate: date,
+        flightWay
+      });
+      return sendJson(res, 200, result);
+    }
+
+    if (pathname === "/api/flight-schedule" && req.method === "GET") {
+      const from = url.searchParams.get("from");
+      const to = url.searchParams.get("to");
+      const date = url.searchParams.get("date");
+      const flightWay = url.searchParams.get("flightWay") || "Oneway";
+
+      if (!from || !to || !date) {
+        return badRequest(res, "缺少必要参数：from, to, date");
+      }
+
+      if (!/^[A-Za-z]{3}$/.test(from) || !/^[A-Za-z]{3}$/.test(to)) {
+        return badRequest(res, "from/to 必须是 3 位城市代码（如 BJS, SHA）");
+      }
+
+      if (!/^\d{8}$/.test(date)) {
+        return badRequest(res, "date 必须是 YYYYMMDD 格式");
+      }
+
+      const result = await provider.fetchFlightSchedule({
+        placeFrom: from.toUpperCase(),
+        placeTo: to.toUpperCase(),
+        departDate: date,
+        flightWay
+      });
+      return sendJson(res, 200, result);
+    }
+
+    if (pathname === "/api/flight-search" && req.method === "GET") {
+      const from = url.searchParams.get("from");
+      const to = url.searchParams.get("to");
+      const date = url.searchParams.get("date");
+      const flightWay = url.searchParams.get("flightWay") || "Oneway";
+
+      if (!from || !to || !date) {
+        return badRequest(res, "缺少必要参数：from, to, date");
+      }
+
+      if (!/^[A-Za-z]{3}$/.test(from) || !/^[A-Za-z]{3}$/.test(to)) {
+        return badRequest(res, "from/to 必须是 3 位城市代码（如 BJS, SHA）");
+      }
+
+      if (!/^\d{8}$/.test(date)) {
+        return badRequest(res, "date 必须是 YYYYMMDD 格式");
+      }
+
+      const result = await provider.fetchFlightSearch({
+        placeFrom: from.toUpperCase(),
+        placeTo: to.toUpperCase(),
+        departDate: date,
+        flightWay
+      });
+      return sendJson(res, 200, result);
+    }
+
+    if (pathname === "/api/flights" && req.method === "GET") {
+      const from = url.searchParams.get("from");
+      const to = url.searchParams.get("to");
+      const date = url.searchParams.get("date");
+      const flightWay = url.searchParams.get("flightWay") || "Oneway";
+      const directOnly = url.searchParams.get("directOnly") === "true";
+
+      if (!from || !to || !date) {
+        return badRequest(res, "缺少必要参数：from, to, date");
+      }
+
+      if (!/^[A-Za-z]{3}$/.test(from) || !/^[A-Za-z]{3}$/.test(to)) {
+        return badRequest(res, "from/to 必须是 3 位 IATA 机场代码");
+      }
+
+      if (!/^\d{8}$/.test(date)) {
+        return badRequest(res, "date 必须是 YYYYMMDD 格式");
+      }
+
+      const result = await provider.fetchFlightList({
+        placeFrom: from.toUpperCase(),
+        placeTo: to.toUpperCase(),
+        departDate: date,
+        flightWay,
+        directOnly
+      });
+      return sendJson(res, 200, result);
     }
 
     const taskRoute = getTaskIdFromPath(pathname);
@@ -80,6 +191,14 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, task);
     }
 
+    if (req.method === "DELETE" && !taskRoute.action) {
+      const task = await monitorService.deleteTask(taskRoute.taskId);
+      if (!task) {
+        return notFound(res, "任务不存在");
+      }
+      return sendJson(res, 200, { ok: true });
+    }
+
     if (req.method === "POST" && taskRoute.action === "check-now") {
       const result = await monitorService.checkTask(taskRoute.taskId);
       return sendJson(res, 200, result);
@@ -91,6 +210,25 @@ const server = http.createServer(async (req, res) => {
         return notFound(res, "任务不存在");
       }
       const items = await monitorService.getHistory(taskRoute.taskId);
+      return sendJson(res, 200, { items });
+    }
+
+    if (req.method === "GET" && taskRoute.action === "events") {
+      const items = await monitorService.getEvents({ taskId: taskRoute.taskId });
+      return sendJson(res, 200, { items });
+    }
+
+    if (req.method === "POST" && taskRoute.action === "clear-unread") {
+      const task = await monitorService.clearUnread(taskRoute.taskId);
+      if (!task) {
+        return notFound(res, "任务不存在");
+      }
+      return sendJson(res, 200, task);
+    }
+
+    // Global events endpoint
+    if (pathname === "/api/events" && req.method === "GET") {
+      const items = await monitorService.getEvents();
       return sendJson(res, 200, { items });
     }
 
@@ -112,8 +250,21 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled rejection:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught exception:", err);
+});
+
 monitorService.init().then(() => {
   server.listen(PORT, HOST, () => {
     console.log(`Flight Alert Mini backend listening on http://${HOST}:${PORT}`);
+  });
+}).catch((err) => {
+  console.error("Failed to initialize monitor service:", err);
+  server.listen(PORT, HOST, () => {
+    console.log(`Flight Alert Mini backend listening on http://${HOST}:${PORT} (store init failed)`);
   });
 });

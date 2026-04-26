@@ -338,6 +338,7 @@ class MonitorService {
                 },
                 ...(nextDb.histories[id] || [])
               ].slice(0, 50)
+            }
           : nextDb.histories;
 
         const newEvents = shouldLogHistory
