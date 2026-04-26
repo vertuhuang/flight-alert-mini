@@ -1,4 +1,9 @@
 {
   "desc": "Flight Alert Mini sitemap",
-  "rules": []
+  "rules": [
+    {
+      "action": "allow",
+      "page": "*"
+    }
+  ]
 }
