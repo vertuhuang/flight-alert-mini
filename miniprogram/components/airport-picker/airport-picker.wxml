@@ -1,6 +1,6 @@
 <view class="picker">
   <!-- Trigger -->
-  <view class="picker-trigger" bindtap="open">
+  <view wx:if="{{showTrigger}}" class="picker-trigger" bindtap="open">
     <view class="picker-trigger__content">
       <view class="picker-trigger__value {{!value ? 'picker-trigger__placeholder' : ''}}">
         {{displayText || placeholder}}
@@ -17,7 +17,7 @@
       <view class="picker-header">
         <view class="picker-header__cancel" bindtap="close">取消</view>
         <view class="picker-header__title">{{label}}</view>
-        <view class="picker-header__confirm" bindtap="confirm">确定</view>
+        <view style="width: 60rpx;"></view>
       </view>
 
       <!-- Search -->
@@ -55,7 +55,6 @@
                     <text class="picker-item__code">{{airport.code}}</text>
                   </view>
                   <view class="picker-item__airports">{{airport.airports}}</view>
-                  <view wx:if="{{selectedCode === airport.code}}" class="picker-item__check">✓</view>
                 </view>
               </block>
             </view>

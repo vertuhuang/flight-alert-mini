@@ -10,6 +10,7 @@ class PushPlusNotifier {
     url.searchParams.set("token", token);
     url.searchParams.set("title", title);
     url.searchParams.set("content", content);
+    url.searchParams.set("template", "markdown");
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);

@@ -1,0 +1,11 @@
+{
+  "navigationBarTitleText": "消息中心",
+  "usingComponents": {
+    "t-cell": "tdesign-miniprogram/cell/cell",
+    "t-tag": "tdesign-miniprogram/tag/tag",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-collapse": "tdesign-miniprogram/collapse/collapse",
+    "t-collapse-panel": "tdesign-miniprogram/collapse-panel/collapse-panel",
+    "t-icon": "tdesign-miniprogram/icon/icon"
+  }
+}

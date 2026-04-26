@@ -3,41 +3,18 @@
   <view class="card">
     <view style="display: flex; align-items: center; justify-content: space-between;">
       <view style="font-size: 34rpx; font-weight: 800; color: #0f172a;">{{task.headerTitle}}</view>
-      <t-tag theme="{{task.active ? 'primary' : 'default'}}" variant="light" size="medium">
-        {{task.active ? '监控中' : '已暂停'}}
-      </t-tag>
+      <t-icon name="more" size="40rpx" color="#0f172a" bindtap="onOpenActionSheet" />
     </view>
 
     <!-- Price -->
-    <view wx:if="{{task.latestSummary && task.latestSummary.minPrice}}" style="margin-top: 12rpx;">
-      <view class="price-label">当前最低价</view>
-      <view class="price-highlight">{{task.latestSummary.minPrice}}<text class="price-unit">元</text></view>
+    <view wx:if="{{task.latestSummary && task.latestSummary.minPrice}}" style="margin-top: 12rpx; display: flex; align-items: baseline; gap: 12rpx;">
+      <text style="font-size: 24rpx; color: #888888;">当前最低价</text>
+      <text class="price-highlight">{{task.latestSummary.minPrice}}</text>
+      <text style="font-size: 24rpx; color: #888888;">元</text>
     </view>
-    <view wx:else style="margin-top: 12rpx;">
-      <view class="muted">暂无价格数据</view>
-    </view>
-
-    <!-- Actions -->
-    <view class="action-row">
-      <t-button
-        theme="primary"
-        size="medium"
-        icon="refresh"
-        loading="{{checking}}"
-        bind:tap="checkNow"
-      >立即检查</t-button>
-      <t-button
-        theme="light"
-        size="medium"
-        icon="edit"
-        bind:tap="goEdit"
-      >编辑</t-button>
-      <t-button
-        theme="{{task.active ? 'light' : 'primary'}}"
-        size="medium"
-        icon="{{task.active ? 'pause' : 'play'}}"
-        bind:tap="toggleActive"
-      >{{task.active ? '暂停' : '启用'}}</t-button>
+    <view wx:else style="margin-top: 12rpx; display: flex; align-items: baseline; gap: 12rpx;">
+      <text style="font-size: 24rpx; color: #888888;">当前最低价</text>
+      <text class="muted">暂无价格数据</text>
     </view>
   </view>
 
@@ -45,17 +22,47 @@
   <view class="card">
     <view class="section-title">任务详情</view>
 
-    <view style="margin-left: -32rpx; margin-right: -32rpx;">
-      <t-cell title="航程类型" note="{{task.flightWay === 'Roundtrip' ? '往返' : '单程'}}" bordered />
-      <t-cell title="出发日期" note="{{task.departDatesText}}" bordered />
-      <t-cell wx:if="{{task.flightWay === 'Roundtrip'}}" title="返程日期" note="{{task.returnDatesText}}" bordered />
-      <t-cell title="变动阈值" note="{{task.threshold}} 元" bordered />
-      <t-cell wx:if="{{task.targetPrice}}" title="目标价格" note="{{task.targetPrice}} 元" bordered />
-      <t-cell title="通知策略" note="{{task.notifyOnDrop ? '仅降价' : '涨降都通知'}}" bordered />
-      <t-cell title="检查间隔" note="{{task.checkIntervalSec}} 秒" bordered />
-      <t-cell title="上次检查" note="{{task.lastCheckedText || '尚未检查'}}" bordered />
-      <t-cell title="下次检查" note="{{task.nextCheckText || '待定'}}" bordered />
-      <t-cell wx:if="{{task.lastError}}" title="最近错误" note="{{task.lastError}}" bordered note-color="error" />
+    <view class="detail-list">
+      <view class="detail-row">
+        <text class="detail-label">航程类型</text>
+        <text class="detail-value">{{task.flightWay === 'Roundtrip' ? '往返' : '单程'}}</text>
+      </view>
+      <view class="detail-row">
+        <text class="detail-label">出发日期</text>
+        <text class="detail-value">{{task.departDatesText}}</text>
+      </view>
+      <view wx:if="{{task.flightWay === 'Roundtrip'}}" class="detail-row">
+        <text class="detail-label">返程日期</text>
+        <text class="detail-value">{{task.returnDatesText}}</text>
+      </view>
+      <view class="detail-row">
+        <text class="detail-label">变动阈值</text>
+        <text class="detail-value">{{task.threshold}} 元</text>
+      </view>
+      <view wx:if="{{task.targetPrice}}" class="detail-row">
+        <text class="detail-label">目标价格</text>
+        <text class="detail-value">{{task.targetPrice}} 元</text>
+      </view>
+      <view class="detail-row">
+        <text class="detail-label">通知策略</text>
+        <text class="detail-value">{{task.notifyOnDrop ? '仅降价' : '涨降都通知'}}</text>
+      </view>
+      <view class="detail-row">
+        <text class="detail-label">检查间隔</text>
+        <text class="detail-value">{{task.checkIntervalSec}} 秒</text>
+      </view>
+      <view class="detail-row">
+        <text class="detail-label">上次检查</text>
+        <text class="detail-value">{{task.lastCheckedText || '尚未检查'}}</text>
+      </view>
+      <view class="detail-row">
+        <text class="detail-label">下次检查</text>
+        <text class="detail-value">{{task.nextCheckText || '待定'}}</text>
+      </view>
+      <view wx:if="{{task.lastError}}" class="detail-row">
+        <text class="detail-label">最近错误</text>
+        <text class="detail-value" style="color: #dc2626;">{{task.lastError}}</text>
+      </view>
     </view>
   </view>
 
@@ -63,27 +70,34 @@
   <view class="card">
     <view class="section-title">变价历史</view>
 
-    <block wx:if="{{history.length}}">
-      <view wx:for="{{history}}" wx:key="id" class="history-item">
-        <view style="display: flex; justify-content: space-between; align-items: center;">
-          <text style="font-size: 26rpx; color: #64748b;">{{item.checkedAtText}}</text>
-          <text wx:if="{{item.summary && item.summary.minPrice}}" style="font-size: 26rpx; color: #0f172a; font-weight: 600;">最低 {{item.summary.minPrice}} 元</text>
-        </view>
-        <view wx:if="{{item.changes.length}}" style="margin-top: 8rpx; display: flex; flex-wrap: wrap; gap: 12rpx;">
-          <view wx:for="{{item.changes}}" wx:for-item="change" wx:key="key" class="change-badge change-badge--{{change.type}}">
-            {{change.label}} {{change.type === 'rise' ? '上涨' : change.type === 'drop' ? '下降' : '首次'}}
-            <text wx:if="{{change.delta !== null}}"> {{change.deltaAbs}}元</text>
+    <view class="history-list">
+      <block wx:if="{{history.length}}">
+        <view wx:for="{{history}}" wx:key="id" class="history-row">
+          <view style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <view style="display: flex; align-items: center; gap: 16rpx;">
+              <text style="font-size: 28rpx; color: #888888;">{{item.checkedAtText}}</text>
+              <block wx:if="{{item.changes.length}}">
+                <block wx:for="{{item.changes}}" wx:for-item="change" wx:key="key">
+                  <text wx:if="{{change.type === 'rise'}}" style="font-size: 26rpx; color: #dc2626;">↑{{change.deltaAbs}}元</text>
+                  <text wx:if="{{change.type === 'drop'}}" style="font-size: 26rpx; color: #16a34a;">↓{{change.deltaAbs}}元</text>
+                  <text wx:if="{{change.type === 'initial'}}" style="font-size: 26rpx; color: #888888;">首次</text>
+                </block>
+              </block>
+            </view>
+            <text wx:if="{{item.summary && item.summary.minPrice}}" style="font-size: 28rpx; color: #0f172a;">{{item.summary.minPrice}} 元</text>
           </view>
         </view>
-      </view>
-    </block>
-    <view wx:else class="empty-hint">还没有历史记录</view>
+      </block>
+      <view wx:else class="empty-hint">还没有历史记录</view>
+    </view>
   </view>
 
-  <!-- Delete -->
-  <view style="margin-top: 32rpx; padding-bottom: 40rpx;">
-    <t-button theme="light" size="large" block bind:tap="confirmDelete">删除任务</t-button>
-  </view>
+  <t-action-sheet
+    visible="{{showActionSheet}}"
+    items="{{actionItems}}"
+    bind:selected="onActionSheetSelect"
+    bind:cancel="onActionSheetClose"
+  />
 
   <t-dialog
     visible="{{showDeleteDialog}}"

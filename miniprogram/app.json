@@ -6,10 +6,10 @@
     "pages/events/events"
   ],
   "window": {
-    "navigationBarTitleText": "航班提醒",
-    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTitleText": "航旅票价监控",
+    "navigationBarBackgroundColor": "#f5f6f9",
     "navigationBarTextStyle": "black",
-    "backgroundColor": "#f8fafc",
+    "backgroundColor": "#f5f6f9",
     "backgroundTextStyle": "light"
   },
   "sitemapLocation": "sitemap.json"

@@ -33,70 +33,93 @@ class CloudBaseStore {
       return;
     }
 
-    // Lazy require keeps the local file-store workflow dependency-free until needed.
-    const cloudbase = require("@cloudbase/node-sdk");
-    const initOptions = {};
+    try {
+      const cloudbase = require("@cloudbase/node-sdk");
+      const secretId = process.env.SECRET_ID;
+      const secretKey = process.env.SECRET_KEY;
 
-    if (CLOUDBASE_ENV_ID) {
-      initOptions.env = CLOUDBASE_ENV_ID;
+      const initOptions = {};
+
+      if (secretId && secretKey) {
+        initOptions.secretId = secretId;
+        initOptions.secretKey = secretKey;
+        if (CLOUDBASE_ENV_ID) {
+          initOptions.env = CLOUDBASE_ENV_ID;
+        }
+        console.log(`CloudBaseStore initialized (explicit credentials, env: ${CLOUDBASE_ENV_ID || "default"})`);
+      } else if (CLOUDBASE_ENV_ID) {
+        initOptions.env = CLOUDBASE_ENV_ID;
+        console.log(`CloudBaseStore initialized (env only, no explicit credentials)`);
+      } else {
+        initOptions.env = cloudbase.SYMBOL_CURRENT_ENV;
+        console.log("CloudBaseStore initialized (SYMBOL_CURRENT_ENV)");
+      }
+
+      this.app = cloudbase.init(initOptions);
+      this.db = this.app.database();
+      this.initialized = true;
+    } catch (error) {
+      console.error("CloudBaseStore init failed:", error.message);
+      throw error;
     }
-
-    this.app = cloudbase.init(initOptions);
-    this.db = this.app.database();
-    this.initialized = true;
   }
 
   async read() {
     await this.init();
 
-    const [tasksRes, historiesRes, eventsRes] = await Promise.all([
-      this.db.collection(TASKS_COLLECTION).limit(1000).get(),
-      this.db.collection(HISTORIES_COLLECTION).limit(1000).get(),
-      this.db.collection(EVENTS_COLLECTION).limit(1000).get()
-    ]);
+    try {
+      const [tasksRes, historiesRes, eventsRes] = await Promise.all([
+        this.db.collection(TASKS_COLLECTION).limit(1000).get(),
+        this.db.collection(HISTORIES_COLLECTION).limit(1000).get(),
+        this.db.collection(EVENTS_COLLECTION).limit(1000).get()
+      ]);
 
-    const tasks = (tasksRes.data || [])
-      .map(stripDocumentMeta)
-      .sort(
-        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-      );
+      const tasks = (tasksRes.data || [])
+        .map(stripDocumentMeta)
+        .sort(
+          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
 
-    const histories = {};
-    for (const item of historiesRes.data || []) {
-      const history = stripDocumentMeta(item);
-      const taskId = history.taskId;
+      const histories = {};
+      for (const item of historiesRes.data || []) {
+        const history = stripDocumentMeta(item);
+        const taskId = history.taskId;
 
-      if (!taskId) {
-        continue;
+        if (!taskId) {
+          continue;
+        }
+
+        if (!histories[taskId]) {
+          histories[taskId] = [];
+        }
+
+        histories[taskId].push({
+          ...history,
+          taskId: undefined
+        });
       }
 
-      if (!histories[taskId]) {
-        histories[taskId] = [];
+      for (const key of Object.keys(histories)) {
+        histories[key] = histories[key].sort(
+          (a, b) => new Date(b.checkedAt).getTime() - new Date(a.checkedAt).getTime()
+        );
       }
 
-      histories[taskId].push({
-        ...history,
-        taskId: undefined
-      });
+      const events = (eventsRes.data || [])
+        .map(stripDocumentMeta)
+        .sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+
+      return {
+        tasks,
+        histories,
+        events
+      };
+    } catch (error) {
+      console.error("CloudBaseStore.read failed:", error.message);
+      throw error;
     }
-
-    for (const key of Object.keys(histories)) {
-      histories[key] = histories[key].sort(
-        (a, b) => new Date(b.checkedAt).getTime() - new Date(a.checkedAt).getTime()
-      );
-    }
-
-    const events = (eventsRes.data || [])
-      .map(stripDocumentMeta)
-      .sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-
-    return {
-      tasks,
-      histories,
-      events
-    };
   }
 
   async write(data) {

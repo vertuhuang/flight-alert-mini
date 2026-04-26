@@ -9,7 +9,9 @@ Page({
     checking: false,
     task: null,
     history: [],
-    showDeleteDialog: false
+    showDeleteDialog: false,
+    showActionSheet: false,
+    actionItems: []
   },
 
   onLoad(query) {
@@ -51,6 +53,13 @@ Page({
       const toCity = getCityByCode(task.placeTo) || task.placeTo;
       const datesShort = joinDatesShort(task.departDates);
 
+      const actionItems = [
+        { label: "重新获取价格" },
+        { label: "编辑" },
+        { label: task.active ? "暂停" : "启用" },
+        { label: "删除任务" }
+      ];
+
       this.setData({
         task: {
           ...task,
@@ -62,7 +71,8 @@ Page({
           lastCheckedText: formatDateTime(task.lastCheckedAt),
           nextCheckText: formatDateTime(task.nextCheckAt)
         },
-        history
+        history,
+        actionItems
       });
     } catch (error) {
       wx.showToast({
@@ -122,6 +132,33 @@ Page({
     wx.navigateTo({
       url: `/pages/task-form/task-form?id=${this.data.id}`
     });
+  },
+
+  onOpenActionSheet() {
+    this.setData({ showActionSheet: true });
+  },
+
+  onActionSheetClose() {
+    this.setData({ showActionSheet: false });
+  },
+
+  onActionSheetSelect(e) {
+    const index = e.detail.index;
+    this.setData({ showActionSheet: false });
+    switch (index) {
+      case 0:
+        this.checkNow();
+        break;
+      case 1:
+        this.goEdit();
+        break;
+      case 2:
+        this.toggleActive();
+        break;
+      case 3:
+        this.confirmDelete();
+        break;
+    }
   },
 
   confirmDelete() {

@@ -1,10 +1,11 @@
 {
+  "navigationBarTitleText": "监控详情",
   "usingComponents": {
     "t-button": "tdesign-miniprogram/button/button",
     "t-tag": "tdesign-miniprogram/tag/tag",
     "t-badge": "tdesign-miniprogram/badge/badge",
     "t-cell": "tdesign-miniprogram/cell/cell",
-
+    "t-action-sheet": "tdesign-miniprogram/action-sheet/action-sheet",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-icon": "tdesign-miniprogram/icon/icon",
     "t-dialog": "tdesign-miniprogram/dialog/dialog"

@@ -80,7 +80,8 @@ class MonitorService {
 
   async getHistory(id) {
     const db = await this.store.read();
-    return db.histories[id] || [];
+    const items = db.histories[id] || [];
+    return [...items].reverse();
   }
 
   async getEvents({ taskId, limit = 50 } = {}) {
@@ -234,7 +235,78 @@ class MonitorService {
       }
     }));
 
+    // 首次检查价格并发送创建通知
+    if (task.pushplusToken) {
+      this.#initialCheckAndNotify(task).catch((err) => {
+        console.error("initial check error", err);
+      });
+    } else {
+      // 没有token也执行检查，只是不发送通知
+      this.checkTask(task.id).catch((err) => {
+        console.error("initial check error", err);
+      });
+    }
+
     return task;
+  }
+
+  async #initialCheckAndNotify(task) {
+    try {
+      const snapshot = await this.provider.fetchPrices(task);
+      const summary = buildSummaryFromSnapshot(snapshot);
+      const checkedAt = isoNow();
+      const nextCheckAt = new Date(
+        Date.now() + task.checkIntervalSec * 1000
+      ).toISOString();
+
+      const updatedTask = {
+        ...task,
+        baseline: this.#buildBaseline(snapshot),
+        latestSnapshot: snapshot,
+        latestSummary: summary,
+        lastError: null,
+        lastCheckedAt: checkedAt,
+        nextCheckAt,
+        updatedAt: checkedAt
+      };
+
+      // 发送创建任务通知
+      const title = "✅ 监控任务已创建";
+      const content = this.#buildCreateNotification(task, summary);
+      const notifyResult = await this.notifier.send({
+        token: task.pushplusToken,
+        title,
+        content
+      });
+
+      await this.store.update((nextDb) => ({
+        ...nextDb,
+        tasks: nextDb.tasks.map((item) =>
+          item.id === task.id ? updatedTask : item
+        )
+      }));
+
+      return { task: updatedTask, notifyResult };
+    } catch (error) {
+      const failedTask = {
+        ...task,
+        lastError: error.message,
+        lastCheckedAt: isoNow(),
+        nextCheckAt: new Date(
+          Date.now() + Math.min(task.checkIntervalSec, 120) * 1000
+        ).toISOString(),
+        updatedAt: isoNow()
+      };
+
+      await this.store.update((nextDb) => ({
+        ...nextDb,
+        tasks: nextDb.tasks.map((item) =>
+          item.id === task.id ? failedTask : item
+        )
+      }));
+
+      throw error;
+    }
   }
 
   async updateTask(id, patch) {
@@ -253,6 +325,7 @@ class MonitorService {
     const updated = {
       ...current,
       ...payload,
+      baseline: current.baseline || {},
       updatedAt: isoNow()
     };
 
@@ -302,10 +375,15 @@ class MonitorService {
       // Filter changes for notification based on strategy
       const notifyChanges = changes.filter((change) => {
         if (change.type === "initial") return false;
+
+        // 目标价格触发：价格下降到目标价以下（无论是否开启仅降价通知）
+        if (task.targetPrice && change.type === "drop" && change.current <= task.targetPrice) {
+          return true;
+        }
+
         // notifyOnDrop: only notify on price drops
         if (task.notifyOnDrop && change.type === "rise") return false;
-        // targetPrice: only notify when current price drops below target
-        if (task.targetPrice && change.current > task.targetPrice) return false;
+
         return true;
       });
 
@@ -487,22 +565,60 @@ class MonitorService {
     const wayLabel = task.flightWay === "Roundtrip" ? "往返" : "单程";
 
     const lines = [
+      `📢 机票价格变动提醒`,
+      "",
       `**${task.name}**`,
-      `${route}（${wayLabel}）`,
+      ``,
+      `📍 航线：${route}`,
+      `🎫 类型：${wayLabel}`,
       ""
     ];
 
     for (const change of changes) {
       const icon = change.type === "drop" ? "📉" : "📈";
       const trend = change.type === "drop" ? "下降" : "上涨";
-      lines.push(`${icon} ${change.label} 价格${trend} **${Math.abs(change.delta)}元**`);
-      lines.push(`　当前：${change.current}元 | 之前：${change.previous}元`);
+      lines.push(`${icon} ${change.label}`);
+      lines.push(`   变动：${trend} ${Math.abs(change.delta)}元`);
+      lines.push(`   当前：${change.current}元`);
+      lines.push(`   之前：${change.previous}元`);
+      lines.push("");
     }
 
     if (task.targetPrice) {
-      lines.push("");
       lines.push(`🎯 目标价：${task.targetPrice}元`);
     }
+
+    lines.push(`⏰ 检查间隔：${task.checkIntervalSec}秒`);
+
+    return lines.join("\n");
+  }
+
+  #buildCreateNotification(task, summary) {
+    const route = `${task.placeFrom} → ${task.placeTo}`;
+    const wayLabel = task.flightWay === "Roundtrip" ? "往返" : "单程";
+    const minPrice = summary?.minPrice || "暂无";
+
+    const lines = [
+      `✅ 监控任务已创建`,
+      "",
+      `**${task.name}**`,
+      "",
+      `📍 航线：${route}`,
+      `🎫 类型：${wayLabel}`,
+      `💰 当前价：${minPrice}元`,
+      `📅 出发日期：${task.departDates.map((d) => `${d.slice(4, 6)}月${d.slice(6, 8)}日`).join("、")}`
+    ];
+
+    if (task.flightWay === "Roundtrip" && task.returnDates?.length) {
+      lines.push(`🔄 返程日期：${task.returnDates.map((d) => `${d.slice(4, 6)}月${d.slice(6, 8)}日`).join("、")}`);
+    }
+
+    if (task.targetPrice) {
+      lines.push(`🎯 目标价：${task.targetPrice}元`);
+    }
+
+    lines.push(`📊 变动阈值：${task.threshold}元`);
+    lines.push(`⏰ 检查间隔：${task.checkIntervalSec}秒`);
 
     return lines.join("\n");
   }

@@ -1,9 +1,13 @@
 const { request } = require("../../utils/request");
 const { getCityByCode, AIRPORTS } = require("../../utils/airports");
-const { formatDateShort } = require("../../utils/format");
+const { formatDateShort, formatDateLong } = require("../../utils/format");
 
 const FLIGHT_WAYS = ["Oneway", "Roundtrip"];
 const FLIGHT_WAY_LABELS = ["单程", "往返"];
+const FLIGHT_WAY_OPTIONS = [
+  { label: "单程", value: "Oneway" },
+  { label: "往返", value: "Roundtrip" }
+];
 
 const AIRPORT_OPTIONS = AIRPORTS.map((a) => ({ label: `${a.city} (${a.code})`, value: a.code }));
 
@@ -26,7 +30,8 @@ Page({
     taskId: "",
     flightWayLabels: FLIGHT_WAY_LABELS,
     flightWayIndex: 0,
-    flightWayOptions: [FLIGHT_WAY_LABELS],
+    flightWayValue: FLIGHT_WAYS[0],
+    flightWayOptions: [FLIGHT_WAY_OPTIONS],
     airportOptions: AIRPORT_OPTIONS,
     form: {
       placeFrom: "",
@@ -81,6 +86,7 @@ Page({
 
       this.setData({
         flightWayIndex,
+        flightWayValue: FLIGHT_WAYS[flightWayIndex],
         form: {
           placeFrom: task.placeFrom || "",
           placeTo: task.placeTo || "",
@@ -97,9 +103,9 @@ Page({
         placeToText: task.placeTo ? getCityByCode(task.placeTo) || task.placeTo : "",
         fromPickerIndex: fromIndex >= 0 ? fromIndex : 0,
         toPickerIndex: toIndex >= 0 ? toIndex : 0,
-        departDateLabel: departDate ? formatDateShort(departDate) : "",
+        departDateLabel: departDate ? formatDateLong(departDate) : "",
         departDateValue: departDate ? `${departDate.slice(0, 4)}-${departDate.slice(4, 6)}-${departDate.slice(6, 8)}` : "",
-        returnDateLabel: returnDate ? formatDateShort(returnDate) : "",
+        returnDateLabel: returnDate ? formatDateLong(returnDate) : "",
         returnDateValue: returnDate ? `${returnDate.slice(0, 4)}-${returnDate.slice(4, 6)}-${returnDate.slice(6, 8)}` : ""
       });
     } catch (error) {
@@ -116,42 +122,29 @@ Page({
   },
 
   openFromPicker() {
-    this.setData({ showFromPicker: true });
+    const picker = this.selectComponent("#fromPicker");
+    if (picker) picker.open();
   },
 
   openToPicker() {
-    this.setData({ showToPicker: true });
+    const picker = this.selectComponent("#toPicker");
+    if (picker) picker.open();
   },
 
-  onAirportConfirm(e) {
-    const key = e.currentTarget.dataset.key;
-    const index = e.detail.value[0];
-    const option = AIRPORT_OPTIONS[index];
-    if (!option) return;
-    if (key === "from") {
-      this.setData({
-        "form.placeFrom": option.value,
-        placeFromText: getCityByCode(option.value) || option.value,
-        fromPickerIndex: index,
-        showFromPicker: false
-      });
-    } else {
-      this.setData({
-        "form.placeTo": option.value,
-        placeToText: getCityByCode(option.value) || option.value,
-        toPickerIndex: index,
-        showToPicker: false
-      });
-    }
+  onFromChange(e) {
+    const { code, city } = e.detail;
+    this.setData({
+      "form.placeFrom": code,
+      placeFromText: city || getCityByCode(code) || code
+    });
   },
 
-  onAirportCancel(e) {
-    const key = e.currentTarget.dataset.key;
-    if (key === "from") {
-      this.setData({ showFromPicker: false });
-    } else {
-      this.setData({ showToPicker: false });
-    }
+  onToChange(e) {
+    const { code, city } = e.detail;
+    this.setData({
+      "form.placeTo": code,
+      placeToText: city || getCityByCode(code) || code
+    });
   },
 
   openFlightWayPicker() {
@@ -159,8 +152,11 @@ Page({
   },
 
   onFlightWayConfirm(event) {
-    const index = event.detail.value[0];
-    this.setData({ flightWayIndex: index, showFlightWayPicker: false });
+    const value = event.detail.value[0];
+    const index = FLIGHT_WAYS.indexOf(value);
+    if (index >= 0) {
+      this.setData({ flightWayIndex: index, flightWayValue: value, showFlightWayPicker: false });
+    }
   },
 
   onFlightWayCancel() {
@@ -168,20 +164,37 @@ Page({
   },
 
   openDepartDatePicker() {
-    this.setData({ showDepartDatePicker: true });
+    let { departDateValue } = this.data;
+    if (!departDateValue) {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, "0");
+      const d = String(now.getDate()).padStart(2, "0");
+      departDateValue = `${y}-${m}-${d}`;
+    }
+    this.setData({ departDateValue, showDepartDatePicker: true });
   },
 
   openReturnDatePicker() {
-    this.setData({ showReturnDatePicker: true });
+    let { returnDateValue } = this.data;
+    if (!returnDateValue) {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, "0");
+      const d = String(now.getDate()).padStart(2, "0");
+      returnDateValue = `${y}-${m}-${d}`;
+    }
+    this.setData({ returnDateValue, showReturnDatePicker: true });
   },
 
   onDepartDateConfirm(e) {
     const dateValue = e.detail.value;
     if (!dateValue) return;
-    const code = dateValue.replace(/-/g, "");
+    const datePart = dateValue.slice(0, 10);
+    const code = datePart.replace(/-/g, "");
     this.setData({
-      departDateLabel: formatDateShort(code),
-      departDateValue: dateValue,
+      departDateLabel: formatDateLong(code),
+      departDateValue: datePart,
       "form.departDates": code,
       showDepartDatePicker: false
     });
@@ -194,10 +207,11 @@ Page({
   onReturnDateConfirm(e) {
     const dateValue = e.detail.value;
     if (!dateValue) return;
-    const code = dateValue.replace(/-/g, "");
+    const datePart = dateValue.slice(0, 10);
+    const code = datePart.replace(/-/g, "");
     this.setData({
-      returnDateLabel: formatDateShort(code),
-      returnDateValue: dateValue,
+      returnDateLabel: formatDateLong(code),
+      returnDateValue: datePart,
       "form.returnDates": code,
       showReturnDatePicker: false
     });

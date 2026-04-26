@@ -1,3 +1,10 @@
 {
-  "navigationBarTitleText": "航班提醒"
+  "navigationBarTitleText": "航旅票价监控",
+  "usingComponents": {
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-tag": "tdesign-miniprogram/tag/tag",
+    "t-badge": "tdesign-miniprogram/badge/badge",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-fab": "tdesign-miniprogram/fab/fab"
+  }
 }

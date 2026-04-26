@@ -1,6 +1,6 @@
 .field-label {
   font-size: 26rpx;
-  color: #475569;
+  color: #94a3b8;
   margin-bottom: 10rpx;
   font-weight: 500;
 }
@@ -33,4 +33,32 @@
   color: #94a3b8;
   font-size: 22rpx;
   padding: 4rpx;
+}
+
+/* TDesign 组件样式调整 */
+.custom-cell {
+  padding-left: 32rpx !important;
+  padding-right: 16rpx !important;
+}
+
+.custom-cell .t-cell__right-icon {
+  font-size: 28rpx !important;
+}
+
+.custom-input {
+  padding-left: 32rpx !important;
+  padding-right: 32rpx !important;
+}
+
+.custom-textarea {
+  padding-left: 32rpx !important;
+  padding-right: 32rpx !important;
+}
+
+.form-list {
+  margin-left: -32rpx;
+  margin-right: -32rpx;
+  margin-bottom: -32rpx;
+  overflow: hidden;
+  border-radius: 0 0 24rpx 24rpx;
 }

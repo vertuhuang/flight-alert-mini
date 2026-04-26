@@ -1,3 +1,49 @@
-.history-item:last-child {
+.detail-cell {
+  padding-left: 32rpx !important;
+  padding-right: 32rpx !important;
+}
+
+.detail-list {
+  margin-left: -32rpx;
+  margin-right: -32rpx;
+  margin-bottom: -32rpx;
+  overflow: hidden;
+  border-radius: 0 0 24rpx 24rpx;
+}
+
+.detail-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 88rpx;
+  padding: 0 32rpx;
+}
+
+.detail-row::after {
+  content: '';
+  position: absolute;
+  left: 32rpx;
+  right: 32rpx;
+  bottom: 0;
+  height: 1rpx;
+  background: #f1f5f9;
+}
+
+.detail-row:last-child::after {
+  display: none;
+}
+
+.detail-row:last-child {
   border-bottom: none;
+}
+
+.detail-label {
+  font-size: 28rpx;
+  color: #0f172a;
+}
+
+.detail-value {
+  font-size: 28rpx;
+  color: #0f172a;
 }

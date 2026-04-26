@@ -8,14 +8,21 @@ module.exports = {
   HOST: process.env.HOST || "0.0.0.0",
   DATA_FILE,
   STORE_DRIVER: process.env.STORE_DRIVER || "file",
-  CLOUDBASE_ENV_ID: process.env.CLOUDBASE_ENV_ID || "",
+  CLOUDBASE_ENV_ID: process.env.CLOUDBASE_ENV_ID || "cloud1-d3gu5h3dk5e16d52b",
   TASKS_COLLECTION: process.env.TASKS_COLLECTION || "flight_alert_tasks",
   HISTORIES_COLLECTION:
     process.env.HISTORIES_COLLECTION || "flight_alert_histories",
   EVENTS_COLLECTION: process.env.EVENTS_COLLECTION || "flight_alert_events",
   CTRIP_LOWEST_PRICE_URL:
     "https://flights.ctrip.com/itinerary/api/12808/lowestPrice",
+  CTRIP_SCHEDULE_URL:
+    "https://flights.ctrip.com/schedule/getScheduleByCityPair",
+  JUHE_FLIGHT_API_URL:
+    "https://apis.juhe.cn/flight/query",
+  JUHE_FLIGHT_API_KEY:
+    process.env.JUHE_FLIGHT_API_KEY || "",
   PUSHPLUS_URL: "https://www.pushplus.plus/send",
+  CHROMIUM_PATH: process.env.CHROMIUM_PATH || "",
   REQUEST_TIMEOUT_MS: 10000,
   DEFAULT_CHECK_INTERVAL_SEC: 600,
   DEFAULT_THRESHOLD: 50,

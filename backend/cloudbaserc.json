@@ -1,7 +1,5 @@
 {
-  "version": "2.0",
   "envId": "cloud1-d3gu5h3dk5e16d52b",
-  "$schema": "https://framework-1258016615.tcloudbaseapp.com/schema/latest.json",
   "cloudrun": {
     "name": "flight-alert-api"
   }

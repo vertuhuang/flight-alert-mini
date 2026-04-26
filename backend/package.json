@@ -5,7 +5,8 @@
   "description": "Backend service for Flight Alert Mini",
   "main": "src/server.js",
   "dependencies": {
-    "@cloudbase/node-sdk": "3.10.1"
+    "@cloudbase/node-sdk": "3.10.1",
+    "puppeteer-core": "^24.42.0"
   },
   "scripts": {
     "start": "node src/server.js"

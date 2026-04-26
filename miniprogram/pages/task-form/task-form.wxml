@@ -2,27 +2,33 @@
   <view class="card">
     <view class="section-title">航线信息</view>
 
-    <view style="margin-left: -32rpx; margin-right: -32rpx;">
-      <t-cell title="出发城市" note="{{form.placeFrom ? placeFromText : '请选择'}}" arrow bindtap="openFromPicker" />
-      <t-cell title="到达城市" note="{{form.placeTo ? placeToText : '请选择'}}" arrow bindtap="openToPicker" />
+    <view class="form-list">
+      <t-cell title="出发城市" arrow bindtap="openFromPicker" t-class="custom-cell">
+        <text slot="note" style="color: {{form.placeFrom ? '#0f172a' : 'rgba(0, 0, 0, 0.4)'}};">{{form.placeFrom ? placeFromText : '请选择'}}</text>
+      </t-cell>
+      <airport-picker id="fromPicker" show-trigger="{{false}}" label="选择出发城市" placeholder="请选择出发城市" value="{{form.placeFrom}}" bind:change="onFromChange" />
 
-      <t-picker title="选择出发城市" visible="{{showFromPicker}}" value="{{[fromPickerIndex]}}" data-key="from" bind:confirm="onAirportConfirm" bind:cancel="onAirportCancel">
-        <t-picker-item options="{{airportOptions}}"></t-picker-item>
-      </t-picker>
-      <t-picker title="选择到达城市" visible="{{showToPicker}}" value="{{[toPickerIndex]}}" data-key="to" bind:confirm="onAirportConfirm" bind:cancel="onAirportCancel">
-        <t-picker-item options="{{airportOptions}}"></t-picker-item>
-      </t-picker>
+      <t-cell title="到达城市" arrow bindtap="openToPicker" t-class="custom-cell">
+        <text slot="note" style="color: {{form.placeTo ? '#0f172a' : 'rgba(0, 0, 0, 0.4)'}};">{{form.placeTo ? placeToText : '请选择'}}</text>
+      </t-cell>
+      <airport-picker id="toPicker" show-trigger="{{false}}" label="选择到达城市" placeholder="请选择到达城市" value="{{form.placeTo}}" bind:change="onToChange" />
 
-      <t-cell title="航程类型" note="{{flightWayLabels[flightWayIndex]}}" arrow bindtap="openFlightWayPicker" />
-      <t-picker title="选择航程类型" visible="{{showFlightWayPicker}}" value="{{[flightWayIndex]}}" bind:confirm="onFlightWayConfirm" bind:cancel="onFlightWayCancel">
+      <t-cell title="航程类型" arrow bindtap="openFlightWayPicker" t-class="custom-cell">
+        <text slot="note" style="color: #0f172a;">{{flightWayLabels[flightWayIndex]}}</text>
+      </t-cell>
+      <t-picker title="选择航程类型" visible="{{showFlightWayPicker}}" value="{{[flightWayValue]}}" bind:confirm="onFlightWayConfirm" bind:cancel="onFlightWayCancel">
         <t-picker-item options="{{flightWayOptions[0]}}"></t-picker-item>
       </t-picker>
 
-      <t-cell title="出发日期" note="{{departDateLabel || '请选择'}}" arrow bindtap="openDepartDatePicker" />
-      <t-date-time-picker visible="{{showDepartDatePicker}}" mode="date" title="选择出发日期" value="{{departDateValue}}" bind:confirm="onDepartDateConfirm" bind:cancel="onDepartDateCancel" />
+      <t-cell title="出发日期" arrow bindtap="openDepartDatePicker" t-class="custom-cell">
+        <text slot="note" style="color: {{departDateLabel ? '#0f172a' : 'rgba(0, 0, 0, 0.4)'}};">{{departDateLabel || '请选择'}}</text>
+      </t-cell>
+      <t-date-time-picker wx:if="{{showDepartDatePicker}}" visible="{{showDepartDatePicker}}" mode="date" title="选择出发日期" value="{{departDateValue}}" bind:confirm="onDepartDateConfirm" bind:cancel="onDepartDateCancel" />
 
-      <t-cell wx:if="{{flightWayIndex === 1}}" title="返程日期" note="{{returnDateLabel || '请选择'}}" arrow bindtap="openReturnDatePicker" />
-      <t-date-time-picker wx:if="{{flightWayIndex === 1}}" visible="{{showReturnDatePicker}}" mode="date" title="选择返程日期" value="{{returnDateValue}}" bind:confirm="onReturnDateConfirm" bind:cancel="onReturnDateCancel" />
+      <t-cell wx:if="{{flightWayIndex === 1}}" title="返程日期" arrow bindtap="openReturnDatePicker" t-class="custom-cell">
+        <text slot="note" style="color: {{returnDateLabel ? '#0f172a' : 'rgba(0, 0, 0, 0.4)'}};">{{returnDateLabel || '请选择'}}</text>
+      </t-cell>
+      <t-date-time-picker wx:if="{{flightWayIndex === 1 && showReturnDatePicker}}" visible="{{showReturnDatePicker}}" mode="date" title="选择返程日期" value="{{returnDateValue}}" bind:confirm="onReturnDateConfirm" bind:cancel="onReturnDateCancel" />
     </view>
   </view>
 
@@ -30,11 +36,11 @@
   <view class="card">
     <view class="section-title">监控策略</view>
 
-    <view style="margin-left: -32rpx; margin-right: -32rpx;">
-      <t-input label="变动阈值" placeholder="价格变动多少元时通知" type="number" value="{{form.threshold}}" bind:change="onInputChange" data-field="threshold" suffix="元" />
-      <t-input label="目标价格" placeholder="低于此价格时通知（可选）" type="number" value="{{form.targetPrice}}" bind:change="onInputChange" data-field="targetPrice" suffix="元" />
-      <t-input label="检查间隔" placeholder="多久检查一次价格" type="number" value="{{form.checkIntervalSec}}" bind:change="onInputChange" data-field="checkIntervalSec" suffix="秒" />
-      <t-cell title="仅降价时通知" bordered="{{false}}">
+    <view class="form-list">
+      <t-input label="变动阈值" placeholder="价格变动多少元时通知" type="number" value="{{form.threshold}}" bind:change="onInputChange" data-field="threshold" suffix="元" t-class="custom-input" />
+      <t-input label="目标价格" placeholder="低于此价格时通知（可选）" type="number" value="{{form.targetPrice}}" bind:change="onInputChange" data-field="targetPrice" suffix="元" t-class="custom-input" />
+      <t-input label="检查间隔" placeholder="多久检查一次价格" type="number" value="{{form.checkIntervalSec}}" bind:change="onInputChange" data-field="checkIntervalSec" suffix="秒" t-class="custom-input" />
+      <t-cell title="仅降价时通知" bordered="{{false}}" t-class="custom-cell">
         <t-switch slot="note" value="{{form.notifyOnDrop}}" bind:change="onNotifyDropChange" />
       </t-cell>
     </view>
@@ -45,9 +51,9 @@
     <view class="section-title">通知方式</view>
     <view class="section-desc">配置 PushPlus Token 后，价格变动会推送到微信</view>
 
-    <view style="margin-left: -32rpx; margin-right: -32rpx;">
-      <t-textarea placeholder="PushPlus Token（不填则仅在小程序内记录）" value="{{form.pushplusToken}}" bind:change="onInputChange" data-field="pushplusToken" maxlength="{{200}}" autosize />
-      <t-cell title="创建后立即启用" bordered="{{false}}">
+    <view class="form-list">
+      <t-textarea placeholder="请前往 PushPlus 官网获取 Token 并填入" value="{{form.pushplusToken}}" bind:change="onInputChange" data-field="pushplusToken" maxlength="{{200}}" autosize t-class="custom-textarea" />
+      <t-cell title="创建后立即启用" bordered="{{false}}" t-class="custom-cell">
         <t-switch slot="note" value="{{form.active}}" bind:change="onActiveChange" />
       </t-cell>
     </view>

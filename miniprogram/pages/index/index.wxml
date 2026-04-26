@@ -12,21 +12,32 @@
         </view>
 
         <!-- Dates -->
-        <view style="margin-top: 8rpx; font-size: 26rpx; color: #64748b;">
+        <view style="margin-top: 8rpx; font-size: 24rpx; color: #888888;">
           {{item.departDatesText}}
           <text wx:if="{{item.flightWay === 'Roundtrip'}}"> 往返</text>
           <text wx:else> 单程</text>
         </view>
 
-        <!-- Price -->
-        <view wx:if="{{item.latestSummary && item.latestSummary.minPrice}}" style="margin-top: 16rpx;">
-          <view class="price-label">当前价格</view>
-          <view class="price-highlight">{{item.latestSummary.minPrice}}<text class="price-unit">元</text></view>
+        <!-- Price + Last change -->
+        <view wx:if="{{item.latestSummary && item.latestSummary.minPrice}}" style="margin-top: 16rpx; display: flex; align-items: flex-end; justify-content: space-between;">
+          <view style="display: flex; align-items: baseline; gap: 12rpx;">
+            <text style="font-size: 24rpx; color: #888888;">当前价格</text>
+            <text class="price-highlight">{{item.latestSummary.minPrice}}</text>
+            <text style="font-size: 24rpx; color: #888888;">元</text>
+          </view>
+          <view style="font-size: 24rpx; color: #888888;">
+            上次变价 {{item.lastPriceChangeText || '尚未变价'}}
+          </view>
         </view>
 
-        <!-- Last price change -->
-        <view style="margin-top: 12rpx; font-size: 24rpx; color: #94a3b8;">
-          上次变价 {{item.lastPriceChangeText || '尚未变价'}}
+        <view wx:else style="margin-top: 16rpx; display: flex; align-items: flex-end; justify-content: space-between;">
+          <view style="display: flex; align-items: baseline; gap: 12rpx;">
+            <text style="font-size: 24rpx; color: #888888;">当前价格</text>
+            <text class="muted">暂无价格数据</text>
+          </view>
+          <view style="font-size: 24rpx; color: #888888;">
+            上次变价 {{item.lastPriceChangeText || '尚未变价'}}
+          </view>
         </view>
 
         <view wx:if="{{item.lastError}}" style="margin-top: 8rpx; color: #dc2626; font-size: 24rpx;">

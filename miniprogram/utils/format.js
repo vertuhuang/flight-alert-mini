@@ -29,6 +29,14 @@ function formatDateShort(dateCode) {
   return `${month}月${day}日`;
 }
 
+function formatDateLong(dateCode) {
+  if (!dateCode || dateCode.length !== 8) return dateCode || "";
+  const year = dateCode.slice(0, 4);
+  const month = dateCode.slice(4, 6);
+  const day = dateCode.slice(6, 8);
+  return `${year}年${month}月${day}日`;
+}
+
 function joinDatesShort(list) {
   return (list || []).map(formatDateShort).join("、");
 }
@@ -38,5 +46,6 @@ module.exports = {
   formatDateTime,
   joinDates,
   formatDateShort,
+  formatDateLong,
   joinDatesShort
 };

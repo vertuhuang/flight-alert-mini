@@ -115,7 +115,11 @@ npm install
 ```bash
 STORE_DRIVER=cloudbase
 CLOUDBASE_ENV_ID=你的云开发环境 ID
+SECRET_ID=你的腾讯云 API SecretId
+SECRET_KEY=你的腾讯云 API SecretKey
 ```
+
+> **注意**：云托管容器中 `@cloudbase/node-sdk` 无法自动获取凭证，必须显式传入 `SECRET_ID` 和 `SECRET_KEY`。密钥获取地址：<https://console.cloud.tencent.com/cam/capi>
 
 可选：
 
@@ -139,6 +143,14 @@ cloudService: "flight-alert-api"
 
 确保小程序已经和目标云开发环境关联，否则 `callContainer` 调不到服务。CloudBase 文档里说明了这是前置条件：
 <https://docs.cloudbase.net/run/develop/access/mini>
+
+## 当前部署信息
+
+- **云环境 ID**：`cloud1-d3gu5h3dk5e16d52b`
+- **云托管服务名**：`flight-alert-api`
+- **服务访问地址**：`https://flight-alert-api-250564-6-1425604696.sh.run.tcloudbase.com`
+- **NoSQL 数据库集合**：`flight_alert_tasks`、`flight_alert_histories`、`flight_alert_events`
+- **控制台入口**：<https://tcb.cloud.tencent.com/dev?envId=cloud1-d3gu5h3dk5e16d52b#/platform-run>
 
 ## 后端接口
 
