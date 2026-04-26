@@ -1,5 +1,6 @@
 const { request } = require("../../utils/request");
-const { formatDateTime } = require("../../utils/format");
+const { formatDateTime, joinDates } = require("../../utils/format");
+const { getCityByCode } = require("../../utils/airports");
 
 Page({
   data: {
@@ -27,6 +28,9 @@ Page({
 
       const tasks = (tasksRes.items || []).map((task) => ({
         ...task,
+        routeText: `${getCityByCode(task.placeFrom) || task.placeFrom} → ${getCityByCode(task.placeTo) || task.placeTo}`,
+        departDatesText: joinDates(task.departDates),
+        lastPriceChangeText: formatDateTime(task.lastPriceChangeAt),
         lastCheckedText: formatDateTime(task.lastCheckedAt),
         nextCheckText: formatDateTime(task.nextCheckAt)
       }));

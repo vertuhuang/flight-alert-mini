@@ -3,37 +3,32 @@
   <block wx:if="{{tasks.length}}">
     <block wx:for="{{tasks}}" wx:key="id">
       <view class="card" data-id="{{item.id}}" bindtap="openTaskDetail">
-        <!-- Title row -->
+        <!-- Route + Status -->
         <view style="display: flex; align-items: center; justify-content: space-between;">
-          <view style="font-size: 30rpx; font-weight: 700; color: #0f172a;">{{item.name}}</view>
-          <view style="display: flex; align-items: center; gap: 12rpx;">
-            <t-badge wx:if="{{item.unreadEvents}}" count="{{item.unreadEvents}}" size="small" />
-            <t-tag theme="{{item.active ? 'primary' : 'default'}}" variant="light" size="small">
-              {{item.active ? '监控中' : '已暂停'}}
-            </t-tag>
-          </view>
+          <view style="font-size: 32rpx; font-weight: 700; color: #0f172a;">{{item.routeText}}</view>
+          <t-tag theme="{{item.active ? 'primary' : 'default'}}" variant="light" size="small">
+            {{item.active ? '监控中' : '已暂停'}}
+          </t-tag>
+        </view>
+
+        <!-- Dates -->
+        <view style="margin-top: 8rpx; font-size: 26rpx; color: #64748b;">
+          {{item.departDatesText}}
+          <text wx:if="{{item.flightWay === 'Roundtrip'}}"> 往返</text>
+          <text wx:else> 单程</text>
         </view>
 
         <!-- Price -->
-        <view wx:if="{{item.latestSummary && item.latestSummary.minPrice}}" style="margin-top: 12rpx;">
-          <view class="price-label">当前最低价</view>
+        <view wx:if="{{item.latestSummary && item.latestSummary.minPrice}}" style="margin-top: 16rpx;">
+          <view class="price-label">当前价格</view>
           <view class="price-highlight">{{item.latestSummary.minPrice}}<text class="price-unit">元</text></view>
         </view>
 
-        <!-- Meta -->
-        <view class="divider"></view>
-        <view class="info-row">
-          <text class="info-label">{{item.flightWay === 'Roundtrip' ? '往返' : '单程'}}</text>
-          <text class="info-value">阈值 {{item.threshold}} 元</text>
+        <!-- Last price change -->
+        <view style="margin-top: 12rpx; font-size: 24rpx; color: #94a3b8;">
+          上次变价 {{item.lastPriceChangeText || '尚未变价'}}
         </view>
-        <view class="info-row" wx:if="{{item.targetPrice}}">
-          <text class="info-label">目标价</text>
-          <text class="info-value">{{item.targetPrice}} 元</text>
-        </view>
-        <view class="info-row">
-          <text class="info-label">上次检查</text>
-          <text class="info-value">{{item.lastCheckedText || '尚未检查'}}</text>
-        </view>
+
         <view wx:if="{{item.lastError}}" style="margin-top: 8rpx; color: #dc2626; font-size: 24rpx;">
           错误：{{item.lastError}}
         </view>

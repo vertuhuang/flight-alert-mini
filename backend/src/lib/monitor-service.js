@@ -63,9 +63,14 @@ class MonitorService {
 
   async listTasks() {
     const db = await this.store.read();
-    return db.tasks.sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    );
+    return db.tasks
+      .sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      )
+      .map((task) => ({
+        ...task,
+        lastPriceChangeAt: db.histories[task.id]?.[0]?.checkedAt || null
+      }));
   }
 
   async getTask(id) {

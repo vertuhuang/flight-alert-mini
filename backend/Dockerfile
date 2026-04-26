@@ -10,7 +10,8 @@ RUN mkdir -p data
 
 # Force cache bust for redeployments
 ARG BUILD_DATE=default
-RUN echo "Build date: ${BUILD_DATE}"
+ARG CACHE_BUST=4
+RUN echo "Build date: ${BUILD_DATE} cache: ${CACHE_BUST}"
 
 ENV PORT=8787
 ENV HOST=0.0.0.0
