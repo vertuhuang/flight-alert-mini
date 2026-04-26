@@ -63,7 +63,7 @@
 
   <!-- History -->
   <view class="card">
-    <view class="section-title">检查历史</view>
+    <view class="section-title">变价历史</view>
 
     <block wx:if="{{history.length}}">
       <t-collapse>

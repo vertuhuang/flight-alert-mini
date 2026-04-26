@@ -6,13 +6,16 @@ COPY package.json ./
 RUN npm install --omit=dev
 
 COPY src ./src
-COPY data ./data
+RUN mkdir -p data
 
-ENV PORT=3000
+# Force cache bust for redeployments
+ARG BUILD_DATE=default
+ARG CACHE_BUST=2
+RUN echo "Build date: ${BUILD_DATE} cache: ${CACHE_BUST}"
+
+ENV PORT=8787
 ENV HOST=0.0.0.0
-ENV STORE_DRIVER=cloudbase
-ENV CLOUDBASE_ENV_ID=cloud1-d3gu5h3dk5e16d52b
 
-EXPOSE 3000
+EXPOSE 8787
 
 CMD ["npm", "start"]

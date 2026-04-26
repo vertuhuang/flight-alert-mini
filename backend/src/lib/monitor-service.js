@@ -340,21 +340,25 @@ class MonitorService {
               ].slice(0, 50)
           : nextDb.histories;
 
+        const newEvents = shouldLogHistory
+          ? [
+              {
+                id: createId("event"),
+                taskId: id,
+                createdAt: checkedAt,
+                changes,
+                notifyResults,
+                notified: notifyChanges.length > 0
+              },
+              ...nextDb.events
+            ].slice(0, 200)
+          : nextDb.events;
+
         return {
           ...nextDb,
           tasks: nextDb.tasks.map((item) => (item.id === id ? updatedTask : item)),
           histories: newHistories,
-          events: [
-            {
-              id: createId("event"),
-              taskId: id,
-              createdAt: checkedAt,
-              changes,
-              notifyResults,
-              notified: notifyChanges.length > 0
-            },
-            ...nextDb.events
-          ].slice(0, 200)
+          events: newEvents
         };
       });
 
