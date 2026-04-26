@@ -45,16 +45,18 @@
   <view class="card">
     <view class="section-title">任务详情</view>
 
-    <t-cell title="航程类型" note="{{task.flightWay === 'Roundtrip' ? '往返' : '单程'}}" bordered />
-    <t-cell title="出发日期" note="{{task.departDatesText}}" bordered />
-    <t-cell wx:if="{{task.flightWay === 'Roundtrip'}}" title="返程日期" note="{{task.returnDatesText}}" bordered />
-    <t-cell title="变动阈值" note="{{task.threshold}} 元" bordered />
-    <t-cell wx:if="{{task.targetPrice}}" title="目标价格" note="{{task.targetPrice}} 元" bordered />
-    <t-cell title="通知策略" note="{{task.notifyOnDrop ? '仅降价' : '涨降都通知'}}" bordered />
-    <t-cell title="检查间隔" note="{{task.checkIntervalSec}} 秒" bordered />
-    <t-cell title="上次检查" note="{{task.lastCheckedText || '尚未检查'}}" bordered />
-    <t-cell title="下次检查" note="{{task.nextCheckText || '待定'}}" bordered />
-    <t-cell wx:if="{{task.lastError}}" title="最近错误" note="{{task.lastError}}" bordered note-color="error" />
+    <view style="margin-left: -32rpx; margin-right: -32rpx;">
+      <t-cell title="航程类型" note="{{task.flightWay === 'Roundtrip' ? '往返' : '单程'}}" bordered />
+      <t-cell title="出发日期" note="{{task.departDatesText}}" bordered />
+      <t-cell wx:if="{{task.flightWay === 'Roundtrip'}}" title="返程日期" note="{{task.returnDatesText}}" bordered />
+      <t-cell title="变动阈值" note="{{task.threshold}} 元" bordered />
+      <t-cell wx:if="{{task.targetPrice}}" title="目标价格" note="{{task.targetPrice}} 元" bordered />
+      <t-cell title="通知策略" note="{{task.notifyOnDrop ? '仅降价' : '涨降都通知'}}" bordered />
+      <t-cell title="检查间隔" note="{{task.checkIntervalSec}} 秒" bordered />
+      <t-cell title="上次检查" note="{{task.lastCheckedText || '尚未检查'}}" bordered />
+      <t-cell title="下次检查" note="{{task.nextCheckText || '待定'}}" bordered />
+      <t-cell wx:if="{{task.lastError}}" title="最近错误" note="{{task.lastError}}" bordered note-color="error" />
+    </view>
   </view>
 
   <!-- History -->
