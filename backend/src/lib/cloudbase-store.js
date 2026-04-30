@@ -211,7 +211,7 @@ class CloudBaseStore {
     return task;
   }
 
-  async getHistory(taskId, { limit = 50 } = {}) {
+  async getHistory(taskId, { limit = 30 } = {}) {
     await this.init();
     const res = await this.db
       .collection(HISTORIES_COLLECTION)
@@ -233,7 +233,43 @@ class CloudBaseStore {
       );
   }
 
-  async appendHistory(taskId, item, { limit = 50 } = {}) {
+  async getHistoriesByTaskIds(taskIds, { limit = 1000 } = {}) {
+    await this.init();
+    const ids = [...new Set((taskIds || []).filter(Boolean))];
+    if (!ids.length) {
+      return {};
+    }
+
+    const _ = this.db.command;
+    const res = await this.db
+      .collection(HISTORIES_COLLECTION)
+      .where({
+        taskId: _.in(ids)
+      })
+      .orderBy("checkedAt", "desc")
+      .limit(limit)
+      .get();
+
+    const grouped = {};
+    for (const item of res.data || []) {
+      const history = stripDocumentMeta(item);
+      const taskId = history.taskId;
+      if (!taskId) {
+        continue;
+      }
+      if (!grouped[taskId]) {
+        grouped[taskId] = [];
+      }
+      grouped[taskId].push({
+        ...history,
+        taskId: undefined
+      });
+    }
+
+    return grouped;
+  }
+
+  async appendHistory(taskId, item, { limit = 30 } = {}) {
     await this.init();
     await this.db.collection(HISTORIES_COLLECTION).doc(item.id).set({
       ...item,

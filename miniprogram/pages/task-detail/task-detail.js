@@ -47,44 +47,14 @@ Page({
         }
       }
 
-      // 按时间倒序排序（最新的在前）
-      const sortedHistory = (historyRes.items || []).sort((a, b) => {
-        return new Date(b.checkedAt).getTime() - new Date(a.checkedAt).getTime();
-      });
-      
-      // 先找出每个 key 的"首次"应该在哪条记录上（时间最早的那条）
-      const firstSeenKeyRecord = new Map(); // key -> 最早出现的记录索引
-      for (let i = sortedHistory.length - 1; i >= 0; i--) {
-        const item = sortedHistory[i];
-        for (const change of item.changes || []) {
-          if (change.type === "initial" && !firstSeenKeyRecord.has(change.key)) {
-            firstSeenKeyRecord.set(change.key, i);
-          }
-        }
-      }
-      
-      // 只保留真正的"首次"标记（每个 key 只保留时间最早的那条）
-      const filteredHistory = [];
-      for (let i = 0; i < sortedHistory.length; i++) {
-        const item = sortedHistory[i];
-        const filteredChanges = (item.changes || []).filter((change) => {
-          if (change.type === "initial") {
-            // 只保留这条记录是该 key 的首次记录
-            return firstSeenKeyRecord.get(change.key) === i;
-          }
-          return true;
-        });
-        
-        // 只保留有有效变动的记录
-        if (filteredChanges.length > 0) {
-          filteredHistory.push({
-            ...item,
-            changes: filteredChanges
-          });
-        }
-      }
-      
-      const history = filteredHistory.map((item) => ({
+      const history = (historyRes.items || [])
+        .sort((a, b) => new Date(b.checkedAt).getTime() - new Date(a.checkedAt).getTime())
+        .map((item) => ({
+          ...item,
+          changes: (item.changes || []).filter((change) => change.type !== "initial")
+        }))
+        .filter((item) => item.changes.length > 0)
+        .map((item) => ({
         ...item,
         checkedAtText: formatDateTime(item.checkedAt),
         changes: item.changes.map((change) => ({

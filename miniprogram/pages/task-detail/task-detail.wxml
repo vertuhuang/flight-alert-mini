@@ -96,7 +96,6 @@
                 <block wx:for="{{item.changes}}" wx:for-item="change" wx:key="key">
                   <text wx:if="{{change.type === 'rise'}}" style="font-size: 26rpx; color: #dc2626;">↑{{change.deltaAbs}}元</text>
                   <text wx:if="{{change.type === 'drop'}}" style="font-size: 26rpx; color: #16a34a;">↓{{change.deltaAbs}}元</text>
-                  <text wx:if="{{change.type === 'initial'}}" style="font-size: 26rpx; color: #888888;">首次</text>
                 </block>
               </block>
             </view>

@@ -13,6 +13,8 @@ const {
 } = require("./utils");
 const { getCityByCode } = require("./airports");
 
+const HISTORY_RETENTION_LIMIT = 30;
+
 class MonitorService {
   constructor({ store, provider, notifier, wxSubscribeNotifier }) {
     this.store = store;
@@ -21,6 +23,7 @@ class MonitorService {
     this.wxSubscribeNotifier = wxSubscribeNotifier;
     this.timer = null;
     this.isChecking = false;
+    this.taskCheckPromises = new Map();
   }
 
   async init() {
@@ -75,10 +78,26 @@ class MonitorService {
   async listTasks() {
     if (typeof this.store.listTasks === "function") {
       const tasks = await this.store.listTasks();
+      const missingLatestChangeIds = tasks
+        .filter((task) => !task.latestChange)
+        .map((task) => task.id);
+      const historiesByTaskId =
+        missingLatestChangeIds.length > 0 &&
+        typeof this.store.getHistoriesByTaskIds === "function"
+          ? await this.store.getHistoriesByTaskIds(missingLatestChangeIds)
+          : {};
+
       return tasks.map((task) => ({
         ...task,
-        lastPriceChangeAt: task.lastPriceChangeAt || null,
-        latestChange: task.latestChange || null
+        ...(task.latestChange
+          ? {
+              lastPriceChangeAt: task.lastPriceChangeAt || null,
+              latestChange: task.latestChange
+            }
+          : this.#buildLatestChangePayload(
+              task,
+              historiesByTaskId[task.id] || []
+            ))
       }));
     }
 
@@ -89,30 +108,9 @@ class MonitorService {
       )
       .map((task) => {
         const histories = db.histories[task.id] || [];
-        const lastHistory = histories[0];
-        // 从历史记录中计算最近一次价格变动
-        let latestChange = null;
-        for (let i = 0; i < histories.length - 1; i++) {
-          const current = histories[i];
-          const previous = histories[i + 1];
-          const currentPrice = current.summary?.minPrice;
-          const previousPrice = previous.summary?.minPrice;
-          if (currentPrice != null && previousPrice != null && currentPrice !== previousPrice) {
-            const delta = currentPrice - previousPrice;
-            latestChange = {
-              checkedAt: current.checkedAt,
-              type: delta < 0 ? "drop" : "rise",
-              delta: Math.abs(delta),
-              currentPrice,
-              previousPrice
-            };
-            break;
-          }
-        }
         return {
           ...task,
-          lastPriceChangeAt: latestChange?.checkedAt || lastHistory?.checkedAt || null,
-          latestChange
+          ...this.#buildLatestChangePayload(task, histories)
         };
       });
   }
@@ -386,6 +384,7 @@ class MonitorService {
       lastError: null,
       lastCheckedAt: null,
       lastPriceChangeAt: null,
+      seenPriceKeys: [],
       nextCheckAt: now,
       unreadEvents: 0,
       subscribeQuota: initialSubscribeQuota,
@@ -410,7 +409,7 @@ class MonitorService {
     const hasPushPlus = !!task.pushplusToken;
     const hasSubscribe = !!task.openid && task.subscribeEnabled;
     if (hasPushPlus || hasSubscribe) {
-      this.#initialCheckAndNotify(task).catch((err) => {
+      this.#withTaskCheckLock(task.id, () => this.#initialCheckAndNotify(task)).catch((err) => {
         console.error("initial check error", err);
       });
     } else {
@@ -441,6 +440,7 @@ class MonitorService {
         lastError: null,
         lastCheckedAt: checkedAt,
         lastPriceChangeAt: task.lastPriceChangeAt || null,
+        seenPriceKeys: this.#mergeSeenPriceKeys(task, [], snapshot),
         nextCheckAt,
         updatedAt: checkedAt
       };
@@ -555,6 +555,7 @@ class MonitorService {
   }
 
   async checkTask(id) {
+    return this.#withTaskCheckLock(id, async () => {
     let task;
     let histories;
     if (
@@ -583,9 +584,14 @@ class MonitorService {
       const nextCheckAt = new Date(
         Date.now() + task.checkIntervalSec * 1000
       ).toISOString();
+      const seenPriceKeys = this.#mergeSeenPriceKeys(task, histories || [], snapshot);
       const previousMinPrice = task.latestSummary?.minPrice;
-      let latestChange = task.latestChange || null;
-      let lastPriceChangeAt = task.lastPriceChangeAt || null;
+      const existingLatestChangePayload = this.#buildLatestChangePayload(
+        task,
+        histories || []
+      );
+      let latestChange = existingLatestChangePayload.latestChange;
+      let lastPriceChangeAt = existingLatestChangePayload.lastPriceChangeAt;
       if (
         previousMinPrice != null &&
         summary?.minPrice != null &&
@@ -611,6 +617,7 @@ class MonitorService {
         lastError: null,
         lastCheckedAt: checkedAt,
         lastPriceChangeAt,
+        seenPriceKeys,
         nextCheckAt,
         updatedAt: checkedAt
       };
@@ -695,6 +702,9 @@ class MonitorService {
             notified: notifyChanges.length > 0
           }
         : null;
+      const isDuplicateHistory = historyRecord
+        ? this.#isDuplicateHistoryRecord(historyRecord, histories || [])
+        : false;
 
       if (
         typeof this.store.writeTask === "function" &&
@@ -702,22 +712,27 @@ class MonitorService {
         typeof this.store.appendEvent === "function"
       ) {
         await this.store.writeTask(updatedTask);
-        if (historyRecord) {
-          await this.store.appendHistory(id, historyRecord, { limit: 50 });
+        if (historyRecord && !isDuplicateHistory) {
+          await this.store.appendHistory(id, historyRecord, {
+            limit: HISTORY_RETENTION_LIMIT
+          });
         }
-        if (eventRecord) {
+        if (eventRecord && !isDuplicateHistory) {
           await this.store.appendEvent(eventRecord, { limit: 200 });
         }
       } else {
         await this.store.update((nextDb) => {
-          const newHistories = shouldLogHistory
+          const newHistories = shouldLogHistory && !isDuplicateHistory
             ? {
                 ...nextDb.histories,
-                [id]: [historyRecord, ...(nextDb.histories[id] || [])].slice(0, 50)
+                [id]: [historyRecord, ...(nextDb.histories[id] || [])].slice(
+                  0,
+                  HISTORY_RETENTION_LIMIT
+                )
               }
             : nextDb.histories;
 
-          const newEvents = shouldLogHistory
+          const newEvents = shouldLogHistory && !isDuplicateHistory
             ? [eventRecord, ...nextDb.events].slice(0, 200)
             : nextDb.events;
 
@@ -759,6 +774,7 @@ class MonitorService {
 
       throw error;
     }
+    });
   }
 
   #buildBaseline(snapshot) {
@@ -781,16 +797,7 @@ class MonitorService {
 
   #compareSnapshot(task, snapshot, histories = []) {
     const baseline = task.baseline || {};
-    
-    // 收集历史记录中已经出现过的所有 key（用于过滤重复的"首次"）
-    const seenKeys = new Set();
-    for (const history of histories) {
-      for (const change of history.changes || []) {
-        if (change.key) {
-          seenKeys.add(change.key);
-        }
-      }
-    }
+    const seenKeys = this.#buildSeenPriceKeySet(task, histories);
     
     const changes = [];
 
@@ -863,6 +870,84 @@ class MonitorService {
     return changes;
   }
 
+  #buildSeenPriceKeySet(task, histories = []) {
+    const seenKeys = new Set(task.seenPriceKeys || []);
+    for (const history of histories) {
+      for (const change of history.changes || []) {
+        if (change.key) {
+          seenKeys.add(change.key);
+        }
+      }
+    }
+    return seenKeys;
+  }
+
+  #extractSnapshotKeys(snapshot) {
+    const keys = [];
+
+    if (snapshot.flightWay === "Roundtrip") {
+      for (const [departDate, returnMap] of Object.entries(snapshot.prices || {})) {
+        for (const returnDate of Object.keys(returnMap || {})) {
+          keys.push(`${departDate}_${returnDate}`);
+        }
+      }
+      return keys;
+    }
+
+    for (const date of Object.keys(snapshot.prices || {})) {
+      keys.push(date);
+    }
+    return keys;
+  }
+
+  #mergeSeenPriceKeys(task, histories = [], snapshot = null) {
+    const seenKeys = this.#buildSeenPriceKeySet(task, histories);
+    if (snapshot) {
+      for (const key of this.#extractSnapshotKeys(snapshot)) {
+        seenKeys.add(key);
+      }
+    }
+    return [...seenKeys];
+  }
+
+  #buildLatestChangePayload(task, histories = []) {
+    if (task.latestChange) {
+      return {
+        lastPriceChangeAt: task.lastPriceChangeAt || task.latestChange.checkedAt || null,
+        latestChange: task.latestChange
+      };
+    }
+
+    const lastHistory = histories[0];
+    let latestChange = null;
+    for (let i = 0; i < histories.length - 1; i++) {
+      const current = histories[i];
+      const previous = histories[i + 1];
+      const currentPrice = current.summary?.minPrice;
+      const previousPrice = previous.summary?.minPrice;
+      if (
+        currentPrice != null &&
+        previousPrice != null &&
+        currentPrice !== previousPrice
+      ) {
+        const delta = currentPrice - previousPrice;
+        latestChange = {
+          checkedAt: current.checkedAt,
+          type: delta < 0 ? "drop" : "rise",
+          delta: Math.abs(delta),
+          currentPrice,
+          previousPrice
+        };
+        break;
+      }
+    }
+
+    return {
+      lastPriceChangeAt: latestChange?.checkedAt || lastHistory?.checkedAt || null,
+      latestChange
+    };
+  }
+
   #buildMergedNotification(task, changes) {
     const fromCity = getCityByCode(task.placeFrom);
     const toCity = getCityByCode(task.placeTo);
@@ -915,6 +1000,53 @@ class MonitorService {
     lines.push(`检查间隔：${task.checkIntervalSec}秒`);
 
     return lines.join("\r\n");
+  }
+
+  #withTaskCheckLock(taskId, runner) {
+    const existing = this.taskCheckPromises.get(taskId);
+    if (existing) {
+      return existing;
+    }
+
+    const promise = Promise.resolve()
+      .then(runner)
+      .finally(() => {
+        this.taskCheckPromises.delete(taskId);
+      });
+    this.taskCheckPromises.set(taskId, promise);
+    return promise;
+  }
+
+  #isDuplicateHistoryRecord(record, histories = []) {
+    const latest = histories[0];
+    if (!latest) {
+      return false;
+    }
+
+    if ((latest.summary?.minPrice ?? null) !== (record.summary?.minPrice ?? null)) {
+      return false;
+    }
+
+    const latestSignature = JSON.stringify(
+      (latest.changes || []).map((change) => ({
+        type: change.type,
+        key: change.key,
+        previous: change.previous ?? null,
+        current: change.current ?? null,
+        delta: change.delta ?? null
+      }))
+    );
+    const recordSignature = JSON.stringify(
+      (record.changes || []).map((change) => ({
+        type: change.type,
+        key: change.key,
+        previous: change.previous ?? null,
+        current: change.current ?? null,
+        delta: change.delta ?? null
+      }))
+    );
+
+    return latestSignature === recordSignature;
   }
 }
 
