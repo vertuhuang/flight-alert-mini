@@ -47,13 +47,22 @@ class MonitorService {
 
     this.isChecking = true;
     try {
-      const db = await this.store.read();
       const now = Date.now();
-      const dueTasks = db.tasks.filter(
-        (task) =>
-          task.active &&
-          (!task.nextCheckAt || new Date(task.nextCheckAt).getTime() <= now)
-      );
+      const nowIso = new Date(now).toISOString();
+      let dueTasks;
+
+      if (typeof this.store.listDueTasks === "function") {
+        dueTasks = await this.store.listDueTasks(nowIso);
+      } else {
+        const tasks = typeof this.store.listTasks === "function"
+          ? await this.store.listTasks()
+          : (await this.store.read()).tasks;
+        dueTasks = tasks.filter(
+          (task) =>
+            task.active &&
+            (!task.nextCheckAt || new Date(task.nextCheckAt).getTime() <= now)
+        );
+      }
 
       for (const task of dueTasks) {
         await this.checkTask(task.id);
@@ -64,6 +73,15 @@ class MonitorService {
   }
 
   async listTasks() {
+    if (typeof this.store.listTasks === "function") {
+      const tasks = await this.store.listTasks();
+      return tasks.map((task) => ({
+        ...task,
+        lastPriceChangeAt: task.lastPriceChangeAt || null,
+        latestChange: task.latestChange || null
+      }));
+    }
+
     const db = await this.store.read();
     return db.tasks
       .sort(
@@ -100,17 +118,43 @@ class MonitorService {
   }
 
   async getTask(id) {
+    if (typeof this.store.getTask === "function") {
+      return this.store.getTask(id);
+    }
+
     const db = await this.store.read();
     return db.tasks.find((task) => task.id === id) || null;
   }
 
   async getHistory(id) {
+    if (typeof this.store.getHistory === "function") {
+      return this.store.getHistory(id);
+    }
+
     const db = await this.store.read();
     const items = db.histories[id] || [];
     return [...items].reverse();
   }
 
   async getEvents({ taskId, limit = 50 } = {}) {
+    if (
+      typeof this.store.getEvents === "function" &&
+      typeof this.store.listTasks === "function"
+    ) {
+      const [events, tasks] = await Promise.all([
+        this.store.getEvents({ taskId, limit }),
+        this.store.listTasks()
+      ]);
+      const taskMap = {};
+      for (const task of tasks) {
+        taskMap[task.id] = task.name;
+      }
+      return events.map((e) => ({
+        ...e,
+        taskName: taskMap[e.taskId] || e.taskId
+      }));
+    }
+
     const db = await this.store.read();
     let events = db.events || [];
     if (taskId) {
@@ -128,15 +172,18 @@ class MonitorService {
   }
 
   async clearUnread(id) {
-    const db = await this.store.read();
-    const task = db.tasks.find((item) => item.id === id);
+    const task = await this.getTask(id);
     if (!task) return null;
 
     const updated = { ...task, unreadEvents: 0, updatedAt: isoNow() };
-    await this.store.update((nextDb) => ({
-      ...nextDb,
-      tasks: nextDb.tasks.map((item) => (item.id === id ? updated : item))
-    }));
+    if (typeof this.store.writeTask === "function") {
+      await this.store.writeTask(updated);
+    } else {
+      await this.store.update((nextDb) => ({
+        ...nextDb,
+        tasks: nextDb.tasks.map((item) => (item.id === id ? updated : item))
+      }));
+    }
     return updated;
   }
 
@@ -145,8 +192,7 @@ class MonitorService {
    * 用户每次授权订阅消息时调用
    */
   async addSubscribeQuota(id, amount = 1) {
-    const db = await this.store.read();
-    const task = db.tasks.find((item) => item.id === id);
+    const task = await this.getTask(id);
     if (!task) return null;
 
     const updated = {
@@ -155,30 +201,42 @@ class MonitorService {
       updatedAt: isoNow()
     };
 
-    await this.store.update((nextDb) => ({
-      ...nextDb,
-      tasks: nextDb.tasks.map((item) => (item.id === id ? updated : item))
-    }));
+    if (typeof this.store.writeTask === "function") {
+      await this.store.writeTask(updated);
+    } else {
+      await this.store.update((nextDb) => ({
+        ...nextDb,
+        tasks: nextDb.tasks.map((item) => (item.id === id ? updated : item))
+      }));
+    }
 
     return updated;
   }
 
   async stopAllTasks() {
-    const db = await this.store.read();
+    const tasks = typeof this.store.listTasks === "function"
+      ? await this.store.listTasks()
+      : (await this.store.read()).tasks;
     const now = isoNow();
     
-    const updatedTasks = db.tasks.map((task) => ({
+    const updatedTasks = tasks.map((task) => ({
       ...task,
       active: false,
       updatedAt: now
     }));
 
-    await this.store.update((nextDb) => ({
-      ...nextDb,
-      tasks: updatedTasks
-    }));
+    if (typeof this.store.writeTask === "function") {
+      for (const task of updatedTasks) {
+        await this.store.writeTask(task);
+      }
+    } else {
+      await this.store.update((nextDb) => ({
+        ...nextDb,
+        tasks: updatedTasks
+      }));
+    }
 
-    return { stoppedCount: db.tasks.length };
+    return { stoppedCount: tasks.length };
   }
 
   /**
@@ -187,8 +245,7 @@ class MonitorService {
    * @returns {boolean} 是否消费成功
    */
   async consumeSubscribeQuota(id) {
-    const db = await this.store.read();
-    const task = db.tasks.find((item) => item.id === id);
+    const task = await this.getTask(id);
     if (!task || !task.subscribeQuota || task.subscribeQuota <= 0) {
       return false;
     }
@@ -199,15 +256,26 @@ class MonitorService {
       updatedAt: isoNow()
     };
 
-    await this.store.update((nextDb) => ({
-      ...nextDb,
-      tasks: nextDb.tasks.map((item) => (item.id === id ? updated : item))
-    }));
+    if (typeof this.store.writeTask === "function") {
+      await this.store.writeTask(updated);
+    } else {
+      await this.store.update((nextDb) => ({
+        ...nextDb,
+        tasks: nextDb.tasks.map((item) => (item.id === id ? updated : item))
+      }));
+    }
 
     return true;
   }
 
   async deleteTask(id) {
+    if (typeof this.store.deleteTaskData === "function") {
+      const task = await this.getTask(id);
+      if (!task) return null;
+      await this.store.deleteTaskData(id);
+      return task;
+    }
+
     const db = await this.store.read();
     const task = db.tasks.find((item) => item.id === id);
     if (!task) return null;
@@ -314,8 +382,10 @@ class MonitorService {
       baseline: {},
       latestSnapshot: null,
       latestSummary: null,
+      latestChange: null,
       lastError: null,
       lastCheckedAt: null,
+      lastPriceChangeAt: null,
       nextCheckAt: now,
       unreadEvents: 0,
       subscribeQuota: initialSubscribeQuota,
@@ -323,14 +393,18 @@ class MonitorService {
       updatedAt: now
     };
 
-    await this.store.update((db) => ({
-      ...db,
-      tasks: [task, ...db.tasks],
-      histories: {
-        ...db.histories,
-        [task.id]: []
-      }
-    }));
+    if (typeof this.store.writeTask === "function") {
+      await this.store.writeTask(task);
+    } else {
+      await this.store.update((db) => ({
+        ...db,
+        tasks: [task, ...db.tasks],
+        histories: {
+          ...db.histories,
+          [task.id]: []
+        }
+      }));
+    }
 
     // 首次检查价格并发送创建通知
     const hasPushPlus = !!task.pushplusToken;
@@ -363,8 +437,10 @@ class MonitorService {
         baseline: this.#buildBaseline(snapshot),
         latestSnapshot: snapshot,
         latestSummary: summary,
+        latestChange: task.latestChange || null,
         lastError: null,
         lastCheckedAt: checkedAt,
+        lastPriceChangeAt: task.lastPriceChangeAt || null,
         nextCheckAt,
         updatedAt: checkedAt
       };
@@ -405,12 +481,16 @@ class MonitorService {
         notifyResults.push({ channel: "wxsubscribe", result: wxResult, quotaConsumed: wxResult?.errcode === 0 });
       }
 
-      await this.store.update((nextDb) => ({
-        ...nextDb,
-        tasks: nextDb.tasks.map((item) =>
-          item.id === task.id ? updatedTask : item
-        )
-      }));
+      if (typeof this.store.writeTask === "function") {
+        await this.store.writeTask(updatedTask);
+      } else {
+        await this.store.update((nextDb) => ({
+          ...nextDb,
+          tasks: nextDb.tasks.map((item) =>
+            item.id === task.id ? updatedTask : item
+          )
+        }));
+      }
 
       return { task: updatedTask, notifyResults };
     } catch (error) {
@@ -424,20 +504,23 @@ class MonitorService {
         updatedAt: isoNow()
       };
 
-      await this.store.update((nextDb) => ({
-        ...nextDb,
-        tasks: nextDb.tasks.map((item) =>
-          item.id === task.id ? failedTask : item
-        )
-      }));
+      if (typeof this.store.writeTask === "function") {
+        await this.store.writeTask(failedTask);
+      } else {
+        await this.store.update((nextDb) => ({
+          ...nextDb,
+          tasks: nextDb.tasks.map((item) =>
+            item.id === task.id ? failedTask : item
+          )
+        }));
+      }
 
       throw error;
     }
   }
 
   async updateTask(id, patch) {
-    const db = await this.store.read();
-    const current = db.tasks.find((item) => item.id === id);
+    const current = await this.getTask(id);
 
     if (!current) {
       return null;
@@ -459,17 +542,34 @@ class MonitorService {
       updated.nextCheckAt = isoNow();
     }
 
-    await this.store.update((nextDb) => ({
-      ...nextDb,
-      tasks: nextDb.tasks.map((item) => (item.id === id ? updated : item))
-    }));
+    if (typeof this.store.writeTask === "function") {
+      await this.store.writeTask(updated);
+    } else {
+      await this.store.update((nextDb) => ({
+        ...nextDb,
+        tasks: nextDb.tasks.map((item) => (item.id === id ? updated : item))
+      }));
+    }
 
     return updated;
   }
 
   async checkTask(id) {
-    const db = await this.store.read();
-    const task = db.tasks.find((item) => item.id === id);
+    let task;
+    let histories;
+    if (
+      typeof this.store.getTask === "function" &&
+      typeof this.store.getHistory === "function"
+    ) {
+      [task, histories] = await Promise.all([
+        this.store.getTask(id),
+        this.store.getHistory(id)
+      ]);
+    } else {
+      const db = await this.store.read();
+      task = db.tasks.find((item) => item.id === id);
+      histories = db.histories[id] || [];
+    }
 
     if (!task) {
       throw new Error("task_not_found");
@@ -477,20 +577,40 @@ class MonitorService {
 
     try {
       const snapshot = await this.provider.fetchPrices(task);
-      const changes = this.#compareSnapshot(task, snapshot, db.histories[task.id] || []);
+      const changes = this.#compareSnapshot(task, snapshot, histories || []);
       const checkedAt = isoNow();
       const summary = buildSummaryFromSnapshot(snapshot);
       const nextCheckAt = new Date(
         Date.now() + task.checkIntervalSec * 1000
       ).toISOString();
+      const previousMinPrice = task.latestSummary?.minPrice;
+      let latestChange = task.latestChange || null;
+      let lastPriceChangeAt = task.lastPriceChangeAt || null;
+      if (
+        previousMinPrice != null &&
+        summary?.minPrice != null &&
+        previousMinPrice !== summary.minPrice
+      ) {
+        const delta = summary.minPrice - previousMinPrice;
+        latestChange = {
+          checkedAt,
+          type: delta < 0 ? "drop" : "rise",
+          delta: Math.abs(delta),
+          currentPrice: summary.minPrice,
+          previousPrice: previousMinPrice
+        };
+        lastPriceChangeAt = checkedAt;
+      }
 
       const updatedTask = {
         ...task,
         baseline: this.#buildBaseline(snapshot),
         latestSnapshot: snapshot,
         latestSummary: summary,
+        latestChange,
         lastError: null,
         lastCheckedAt: checkedAt,
+        lastPriceChangeAt,
         nextCheckAt,
         updatedAt: checkedAt
       };
@@ -554,45 +674,61 @@ class MonitorService {
       const unreadDelta = notifyChanges.length > 0 ? 1 : 0;
       updatedTask.unreadEvents = (task.unreadEvents || 0) + unreadDelta;
 
-      await this.store.update((nextDb) => {
-        const newHistories = shouldLogHistory
-          ? {
-              ...nextDb.histories,
-              [id]: [
-                {
-                  id: createId("history"),
-                  taskId: id,
-                  checkedAt,
-                  summary,
-                  changes,
-                  snapshot
-                },
-                ...(nextDb.histories[id] || [])
-              ].slice(0, 50)
-            }
-          : nextDb.histories;
+      const historyRecord = shouldLogHistory
+        ? {
+            id: createId("history"),
+            taskId: id,
+            checkedAt,
+            summary,
+            changes,
+            snapshot
+          }
+        : null;
 
-        const newEvents = shouldLogHistory
-          ? [
-              {
-                id: createId("event"),
-                taskId: id,
-                createdAt: checkedAt,
-                changes,
-                notifyResults,
-                notified: notifyChanges.length > 0
-              },
-              ...nextDb.events
-            ].slice(0, 200)
-          : nextDb.events;
+      const eventRecord = shouldLogHistory
+        ? {
+            id: createId("event"),
+            taskId: id,
+            createdAt: checkedAt,
+            changes,
+            notifyResults,
+            notified: notifyChanges.length > 0
+          }
+        : null;
 
-        return {
-          ...nextDb,
-          tasks: nextDb.tasks.map((item) => (item.id === id ? updatedTask : item)),
-          histories: newHistories,
-          events: newEvents
-        };
-      });
+      if (
+        typeof this.store.writeTask === "function" &&
+        typeof this.store.appendHistory === "function" &&
+        typeof this.store.appendEvent === "function"
+      ) {
+        await this.store.writeTask(updatedTask);
+        if (historyRecord) {
+          await this.store.appendHistory(id, historyRecord, { limit: 50 });
+        }
+        if (eventRecord) {
+          await this.store.appendEvent(eventRecord, { limit: 200 });
+        }
+      } else {
+        await this.store.update((nextDb) => {
+          const newHistories = shouldLogHistory
+            ? {
+                ...nextDb.histories,
+                [id]: [historyRecord, ...(nextDb.histories[id] || [])].slice(0, 50)
+              }
+            : nextDb.histories;
+
+          const newEvents = shouldLogHistory
+            ? [eventRecord, ...nextDb.events].slice(0, 200)
+            : nextDb.events;
+
+          return {
+            ...nextDb,
+            tasks: nextDb.tasks.map((item) => (item.id === id ? updatedTask : item)),
+            histories: newHistories,
+            events: newEvents
+          };
+        });
+      }
 
       return {
         task: updatedTask,
@@ -610,12 +746,16 @@ class MonitorService {
         updatedAt: isoNow()
       };
 
-      await this.store.update((nextDb) => ({
-        ...nextDb,
-        tasks: nextDb.tasks.map((item) =>
-          item.id === id ? failedTask : item
-        )
-      }));
+      if (typeof this.store.writeTask === "function") {
+        await this.store.writeTask(failedTask);
+      } else {
+        await this.store.update((nextDb) => ({
+          ...nextDb,
+          tasks: nextDb.tasks.map((item) =>
+            item.id === id ? failedTask : item
+          )
+        }));
+      }
 
       throw error;
     }
