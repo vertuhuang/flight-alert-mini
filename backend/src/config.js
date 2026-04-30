@@ -22,6 +22,10 @@ module.exports = {
   JUHE_FLIGHT_API_KEY:
     process.env.JUHE_FLIGHT_API_KEY || "",
   PUSHPLUS_URL: "https://www.pushplus.plus/send",
+  // WeChat subscribe message config
+  WX_APPID: process.env.WX_APPID || "",
+  WX_APPSECRET: process.env.WX_APPSECRET || "",
+  SUBSCRIBE_TEMPLATE_ID: process.env.SUBSCRIBE_TEMPLATE_ID || "9sSdwh_lZfkNgQPzpcwD4bNbofTq0RIrnTU9LeLmrEM",
   CHROMIUM_PATH: process.env.CHROMIUM_PATH || "",
   REQUEST_TIMEOUT_MS: 10000,
   DEFAULT_CHECK_INTERVAL_SEC: 600,

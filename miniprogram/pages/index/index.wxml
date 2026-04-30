@@ -2,42 +2,36 @@
   <!-- Task list -->
   <block wx:if="{{tasks.length}}">
     <block wx:for="{{tasks}}" wx:key="id">
-      <view class="card" data-id="{{item.id}}" bindtap="openTaskDetail">
-        <!-- Route + Status -->
+      <view class="card" data-id="{{item.id}}" bindtap="openTaskDetail" catch:longpress="onLongPress">
+        <!-- Route + Status + Price -->
         <view style="display: flex; align-items: center; justify-content: space-between;">
-          <view style="font-size: 32rpx; font-weight: 700; color: #0f172a;">{{item.routeText}}</view>
-          <t-tag theme="{{item.active ? 'primary' : 'default'}}" variant="light" size="small">
-            {{item.active ? '监控中' : '已暂停'}}
-          </t-tag>
-        </view>
-
-        <!-- Dates -->
-        <view style="margin-top: 8rpx; font-size: 24rpx; color: #888888;">
-          {{item.departDatesText}}
-          <text wx:if="{{item.flightWay === 'Roundtrip'}}"> 往返</text>
-          <text wx:else> 单程</text>
-        </view>
-
-        <!-- Price + Last change -->
-        <view wx:if="{{item.latestSummary && item.latestSummary.minPrice}}" style="margin-top: 16rpx; display: flex; align-items: flex-end; justify-content: space-between;">
-          <view style="display: flex; align-items: baseline; gap: 12rpx;">
-            <text style="font-size: 24rpx; color: #888888;">当前价格</text>
-            <text class="price-highlight">{{item.latestSummary.minPrice}}</text>
-            <text style="font-size: 24rpx; color: #888888;">元</text>
+          <view style="display: flex; align-items: center; gap: 12rpx;">
+            <view style="font-size: 32rpx; font-weight: 700; color: #0f172a;">{{item.routeText}}</view>
+            <view wx:if="{{!item.active}}" class="status-dot" title="已暂停"></view>
           </view>
+          <view style="display: flex; align-items: center; gap: 12rpx;">
+            <view wx:if="{{item.currentPrice != null}}" style="display: flex; align-items: baseline; gap: 4rpx;">
+              <text style="font-size: 24rpx; color: #888888;">当前最低价</text>
+              <text style="font-size: 32rpx; font-weight: 700; color: #0f172a;">{{item.currentPrice}}</text>
+              <text style="font-size: 24rpx; color: #888888;">元</text>
+            </view>
+            <view wx:else style="font-size: 24rpx; color: #888888;">暂无价格数据</view>
+          </view>
+        </view>
+
+        <!-- Dates + Last change -->
+        <view style="margin-top: 8rpx; display: flex; align-items: center; justify-content: space-between;">
           <view style="font-size: 24rpx; color: #888888;">
-            上次变价 {{item.lastPriceChangeText || '尚未变价'}}
+            {{item.departDatesText}}
+            <text wx:if="{{item.flightWay === 'Roundtrip'}}"> 往返</text>
+            <text wx:else> 单程</text>
           </view>
-        </view>
-
-        <view wx:else style="margin-top: 16rpx; display: flex; align-items: flex-end; justify-content: space-between;">
-          <view style="display: flex; align-items: baseline; gap: 12rpx;">
-            <text style="font-size: 24rpx; color: #888888;">当前价格</text>
-            <text class="muted">暂无价格数据</text>
+          <view wx:if="{{item.latestChangeInfo}}" style="font-size: 24rpx; display: flex; align-items: center; gap: 8rpx;">
+            <text style="color: #888888;">{{item.latestChangeInfo.timeStr}}</text>
+            <text wx:if="{{item.latestChangeInfo.type === 'drop'}}" style="color: #16a34a;">↓{{item.latestChangeInfo.delta}}元</text>
+            <text wx:if="{{item.latestChangeInfo.type === 'rise'}}" style="color: #dc2626;">↑{{item.latestChangeInfo.delta}}元</text>
           </view>
-          <view style="font-size: 24rpx; color: #888888;">
-            上次变价 {{item.lastPriceChangeText || '尚未变价'}}
-          </view>
+          <view wx:else style="font-size: 24rpx; color: #888888;">尚未变价</view>
         </view>
 
         <view wx:if="{{item.lastError}}" style="margin-top: 8rpx; color: #dc2626; font-size: 24rpx;">
@@ -57,4 +51,23 @@
 
   <!-- FAB -->
   <t-fab icon="add" bind:click="goCreateTask" />
+
+  <!-- ActionSheet -->
+  <t-action-sheet
+    visible="{{showActionSheet}}"
+    items="{{actionItems}}"
+    bind:selected="onActionSheetSelect"
+    bind:cancel="onActionSheetClose"
+  />
+
+  <!-- Delete Dialog -->
+  <t-dialog
+    visible="{{showDeleteDialog}}"
+    title="确认删除"
+    content="删除后无法恢复，确认要删除这个任务吗？"
+    confirm-btn="删除"
+    cancel-btn="取消"
+    bind:confirm="doDelete"
+    bind:cancel="onCloseDeleteDialog"
+  />
 </view>

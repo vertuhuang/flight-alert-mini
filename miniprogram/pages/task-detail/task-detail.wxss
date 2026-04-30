@@ -47,3 +47,24 @@
   font-size: 28rpx;
   color: #0f172a;
 }
+
+.subscribe-action {
+  font-size: 28rpx;
+  color: #3b82f6;
+}
+
+.subscribe-row {
+  align-items: center !important;
+}
+
+.subscribe-row .subscribe-action {
+  display: block;
+  line-height: 88rpx;
+}
+
+.status-dot {
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  background-color: #9ca3af;
+}

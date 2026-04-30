@@ -18,6 +18,16 @@ function formatDateTime(value) {
   )} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+function formatMonthDayTime(value) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+  const pad = (num) => String(num).padStart(2, "0");
+  return `${pad(date.getMonth() + 1)}月${pad(date.getDate())}日 ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
 function joinDates(list) {
   return (list || []).map(formatDateCode).join(", ");
 }
@@ -44,6 +54,7 @@ function joinDatesShort(list) {
 module.exports = {
   formatDateCode,
   formatDateTime,
+  formatMonthDayTime,
   joinDates,
   formatDateShort,
   formatDateLong,

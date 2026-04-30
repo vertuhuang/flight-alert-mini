@@ -1,6 +1,7 @@
 const { request } = require("../../utils/request");
 const { formatDateTime, joinDates, joinDatesShort } = require("../../utils/format");
 const { getCityByCode } = require("../../utils/airports");
+const { requestSubscribe, markSubscribed, SUBSCRIBE_TEMPLATE_ID } = require("../../utils/subscribe");
 
 Page({
   data: {
@@ -11,7 +12,8 @@ Page({
     history: [],
     showDeleteDialog: false,
     showActionSheet: false,
-    actionItems: []
+    actionItems: [],
+    subscribeCount: 0
   },
 
   onLoad(query) {
@@ -38,12 +40,54 @@ Page({
           url: `/tasks/${this.data.id}/clear-unread`,
           method: "POST"
         }).catch(() => {});
+
+        // 查看通知后，如果任务开启了订阅消息，提示用户重新订阅
+        if (task.subscribeEnabled && SUBSCRIBE_TEMPLATE_ID) {
+          this.promptResubscribe();
+        }
       }
 
-      const history = (historyRes.items || []).map((item) => ({
+      // 按时间倒序排序（最新的在前）
+      const sortedHistory = (historyRes.items || []).sort((a, b) => {
+        return new Date(b.checkedAt).getTime() - new Date(a.checkedAt).getTime();
+      });
+      
+      // 先找出每个 key 的"首次"应该在哪条记录上（时间最早的那条）
+      const firstSeenKeyRecord = new Map(); // key -> 最早出现的记录索引
+      for (let i = sortedHistory.length - 1; i >= 0; i--) {
+        const item = sortedHistory[i];
+        for (const change of item.changes || []) {
+          if (change.type === "initial" && !firstSeenKeyRecord.has(change.key)) {
+            firstSeenKeyRecord.set(change.key, i);
+          }
+        }
+      }
+      
+      // 只保留真正的"首次"标记（每个 key 只保留时间最早的那条）
+      const filteredHistory = [];
+      for (let i = 0; i < sortedHistory.length; i++) {
+        const item = sortedHistory[i];
+        const filteredChanges = (item.changes || []).filter((change) => {
+          if (change.type === "initial") {
+            // 只保留这条记录是该 key 的首次记录
+            return firstSeenKeyRecord.get(change.key) === i;
+          }
+          return true;
+        });
+        
+        // 只保留有有效变动的记录
+        if (filteredChanges.length > 0) {
+          filteredHistory.push({
+            ...item,
+            changes: filteredChanges
+          });
+        }
+      }
+      
+      const history = filteredHistory.map((item) => ({
         ...item,
         checkedAtText: formatDateTime(item.checkedAt),
-        changes: (item.changes || []).map((change) => ({
+        changes: item.changes.map((change) => ({
           ...change,
           deltaAbs: change.delta == null ? "" : Math.abs(change.delta)
         }))
@@ -72,7 +116,8 @@ Page({
           nextCheckText: formatDateTime(task.nextCheckAt)
         },
         history,
-        actionItems
+        actionItems,
+        subscribeCount: task.subscribeQuota || 0
       });
     } catch (error) {
       wx.showToast({
@@ -180,5 +225,40 @@ Page({
         icon: "none"
       });
     }
+  },
+
+  /**
+   * 提示用户重新订阅消息
+   * 订阅消息为一次性消费，发送一条后需要用户重新授权
+   */
+  async promptResubscribe() {
+    try {
+      const res = await requestSubscribe();
+      // 检查是否有模板授权成功
+      if (res && SUBSCRIBE_TEMPLATE_ID && res[SUBSCRIBE_TEMPLATE_ID] === "accept") {
+        markSubscribed(this.data.id);
+        // 调用后端 API 增加配额
+        const result = await request({
+          url: `/tasks/${this.data.id}/subscribe-quota`,
+          method: "POST",
+          data: { amount: 1 }
+        });
+        // 更新显示的配额
+        if (result && result.subscribeQuota !== undefined) {
+          this.setData({ subscribeCount: result.subscribeQuota });
+        }
+        wx.showToast({ title: "订阅成功", icon: "success" });
+      }
+    } catch (err) {
+      // 用户拒绝或不支持，不影响主流程
+      console.log("重新订阅提示:", err);
+    }
+  },
+
+  /**
+   * 用户主动点击重新订阅按钮
+   */
+  async onResubscribe() {
+    await this.promptResubscribe();
   }
 });

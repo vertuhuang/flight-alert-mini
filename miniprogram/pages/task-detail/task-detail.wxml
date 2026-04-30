@@ -2,7 +2,10 @@
   <!-- Task header -->
   <view class="card">
     <view style="display: flex; align-items: center; justify-content: space-between;">
-      <view style="font-size: 34rpx; font-weight: 800; color: #0f172a;">{{task.headerTitle}}</view>
+      <view style="display: flex; align-items: center; gap: 12rpx;">
+        <view style="font-size: 34rpx; font-weight: 800; color: #0f172a;">{{task.headerTitle}}</view>
+        <view wx:if="{{!task.active}}" class="status-dot" title="已暂停"></view>
+      </view>
       <t-icon name="more" size="40rpx" color="#0f172a" bindtap="onOpenActionSheet" />
     </view>
 
@@ -46,6 +49,19 @@
       <view class="detail-row">
         <text class="detail-label">通知策略</text>
         <text class="detail-value">{{task.notifyOnDrop ? '仅降价' : '涨降都通知'}}</text>
+      </view>
+      <view class="detail-row">
+        <text class="detail-label">通知渠道</text>
+        <text class="detail-value">
+          <text wx:if="{{task.subscribeEnabled}}">订阅提醒</text>
+          <text wx:if="{{task.subscribeEnabled && task.pushplusToken}}"> + </text>
+          <text wx:if="{{task.pushplusToken}}">PushPlus</text>
+          <text wx:if="{{!task.subscribeEnabled && !task.pushplusToken}}">未配置</text>
+        </text>
+      </view>
+      <view wx:if="{{task.subscribeEnabled}}" class="detail-row subscribe-row" bindtap="onResubscribe">
+        <text class="detail-label">订阅消息授权</text>
+        <text class="subscribe-action">立即获取（+{{subscribeCount}}）</text>
       </view>
       <view class="detail-row">
         <text class="detail-label">检查间隔</text>

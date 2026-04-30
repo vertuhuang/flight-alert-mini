@@ -1,6 +1,7 @@
 const { request } = require("../../utils/request");
 const { getCityByCode, AIRPORTS } = require("../../utils/airports");
 const { formatDateShort, formatDateLong } = require("../../utils/format");
+const { requestSubscribe, ensureOpenid, markSubscribed, SUBSCRIBE_TEMPLATE_ID } = require("../../utils/subscribe");
 
 const FLIGHT_WAYS = ["Oneway", "Roundtrip"];
 const FLIGHT_WAY_LABELS = ["单程", "往返"];
@@ -43,6 +44,7 @@ Page({
       notifyOnDrop: true,
       checkIntervalSec: "600",
       pushplusToken: "",
+      subscribeEnabled: !!SUBSCRIBE_TEMPLATE_ID,
       active: true
     },
     placeFromText: "",
@@ -97,6 +99,7 @@ Page({
           notifyOnDrop: task.notifyOnDrop !== false,
           checkIntervalSec: String(task.checkIntervalSec || 600),
           pushplusToken: task.pushplusToken || "",
+          subscribeEnabled: task.subscribeEnabled !== false,
           active: task.active !== false
         },
         placeFromText: task.placeFrom ? getCityByCode(task.placeFrom) || task.placeFrom : "",
@@ -229,6 +232,10 @@ Page({
     this.setData({ "form.active": event.detail.value });
   },
 
+  onSubscribeChange(event) {
+    this.setData({ "form.subscribeEnabled": event.detail.value });
+  },
+
   async submit() {
     if (this.data.submitting) return;
 
@@ -244,6 +251,13 @@ Page({
     }
 
     const autoName = generateTaskName(form, flightWayIndex);
+    let subscribeAccepted = false;
+
+    // 获取 openid（如果开启了订阅消息）
+    let openid = "";
+    if (form.subscribeEnabled && SUBSCRIBE_TEMPLATE_ID) {
+      openid = await ensureOpenid();
+    }
 
     const payload = {
       ...form,
@@ -251,11 +265,22 @@ Page({
       flightWay: FLIGHT_WAYS[flightWayIndex],
       placeFrom: form.placeFrom.toUpperCase(),
       placeTo: form.placeTo.toUpperCase(),
-      targetPrice: form.targetPrice ? Number(form.targetPrice) : null
+      targetPrice: form.targetPrice ? Number(form.targetPrice) : null,
+      openid,
+      subscribeQuota: 0
     };
 
     this.setData({ submitting: true });
     try {
+      // 请求订阅消息授权（在创建任务前）
+      if (form.subscribeEnabled && SUBSCRIBE_TEMPLATE_ID) {
+        const subscribeRes = await requestSubscribe();
+        subscribeAccepted = subscribeRes[SUBSCRIBE_TEMPLATE_ID] === "accept";
+        if (!isEdit && subscribeAccepted) {
+          payload.subscribeQuota = 1;
+        }
+      }
+
       if (form.pushplusToken) {
         wx.setStorageSync("pushplus_token", form.pushplusToken);
       }
@@ -266,14 +291,27 @@ Page({
           method: "PATCH",
           data: payload
         });
+        if (form.subscribeEnabled && subscribeAccepted) {
+          await request({
+            url: `/tasks/${taskId}/subscribe-quota`,
+            method: "POST",
+            data: { amount: 1 }
+          });
+        }
         wx.showToast({ title: "更新成功", icon: "success" });
+        if (form.subscribeEnabled && subscribeAccepted) {
+          markSubscribed(taskId);
+        }
       } else {
-        await request({
+        const task = await request({
           url: "/tasks",
           method: "POST",
           data: payload
         });
         wx.showToast({ title: "创建成功", icon: "success" });
+        if (form.subscribeEnabled && subscribeAccepted && task.id) {
+          markSubscribed(task.id);
+        }
       }
       setTimeout(() => wx.navigateBack(), 500);
     } catch (error) {

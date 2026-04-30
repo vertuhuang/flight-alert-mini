@@ -152,6 +152,20 @@ cloudService: "flight-alert-api"
 - **NoSQL 数据库集合**：`flight_alert_tasks`、`flight_alert_histories`、`flight_alert_events`
 - **控制台入口**：<https://tcb.cloud.tencent.com/dev?envId=cloud1-d3gu5h3dk5e16d52b#/platform-run>
 
+### 环境变量配置
+
+| 变量名 | 说明 |
+|--------|------|
+| `STORE_DRIVER` | 数据存储驱动，`cloudbase` 使用云开发数据库 |
+| `CLOUDBASE_ENV_ID` | 云开发环境 ID |
+| `WX_APPID` | 微信小程序 AppID：`wx0b7eb053d1adfda8` |
+| `WX_APPSECRET` | 微信小程序 AppSecret |
+| `SUBSCRIBE_TEMPLATE_ID` | 微信订阅消息模板 ID：`9sSdwh_lZfkNgQPzpcwD4bNbofTq0RIrnTU9LeLmrEM` |
+
+### 新增接口
+
+- `POST /api/auth/login` - 微信登录，用 code 换取 openid
+
 ## 后端接口
 
 - `GET /api/health`

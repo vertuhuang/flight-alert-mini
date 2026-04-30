@@ -11,12 +11,14 @@ const {
   isoNow,
   normalizeDateList
 } = require("./utils");
+const { getCityByCode } = require("./airports");
 
 class MonitorService {
-  constructor({ store, provider, notifier }) {
+  constructor({ store, provider, notifier, wxSubscribeNotifier }) {
     this.store = store;
     this.provider = provider;
     this.notifier = notifier;
+    this.wxSubscribeNotifier = wxSubscribeNotifier;
     this.timer = null;
     this.isChecking = false;
   }
@@ -67,10 +69,34 @@ class MonitorService {
       .sort(
         (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
       )
-      .map((task) => ({
-        ...task,
-        lastPriceChangeAt: db.histories[task.id]?.[0]?.checkedAt || null
-      }));
+      .map((task) => {
+        const histories = db.histories[task.id] || [];
+        const lastHistory = histories[0];
+        // 从历史记录中计算最近一次价格变动
+        let latestChange = null;
+        for (let i = 0; i < histories.length - 1; i++) {
+          const current = histories[i];
+          const previous = histories[i + 1];
+          const currentPrice = current.summary?.minPrice;
+          const previousPrice = previous.summary?.minPrice;
+          if (currentPrice != null && previousPrice != null && currentPrice !== previousPrice) {
+            const delta = currentPrice - previousPrice;
+            latestChange = {
+              checkedAt: current.checkedAt,
+              type: delta < 0 ? "drop" : "rise",
+              delta: Math.abs(delta),
+              currentPrice,
+              previousPrice
+            };
+            break;
+          }
+        }
+        return {
+          ...task,
+          lastPriceChangeAt: latestChange?.checkedAt || lastHistory?.checkedAt || null,
+          latestChange
+        };
+      });
   }
 
   async getTask(id) {
@@ -112,6 +138,73 @@ class MonitorService {
       tasks: nextDb.tasks.map((item) => (item.id === id ? updated : item))
     }));
     return updated;
+  }
+
+  /**
+   * 增加订阅消息配额
+   * 用户每次授权订阅消息时调用
+   */
+  async addSubscribeQuota(id, amount = 1) {
+    const db = await this.store.read();
+    const task = db.tasks.find((item) => item.id === id);
+    if (!task) return null;
+
+    const updated = {
+      ...task,
+      subscribeQuota: (task.subscribeQuota || 0) + amount,
+      updatedAt: isoNow()
+    };
+
+    await this.store.update((nextDb) => ({
+      ...nextDb,
+      tasks: nextDb.tasks.map((item) => (item.id === id ? updated : item))
+    }));
+
+    return updated;
+  }
+
+  async stopAllTasks() {
+    const db = await this.store.read();
+    const now = isoNow();
+    
+    const updatedTasks = db.tasks.map((task) => ({
+      ...task,
+      active: false,
+      updatedAt: now
+    }));
+
+    await this.store.update((nextDb) => ({
+      ...nextDb,
+      tasks: updatedTasks
+    }));
+
+    return { stoppedCount: db.tasks.length };
+  }
+
+  /**
+   * 消费订阅消息配额
+   * 发送订阅消息成功后调用
+   * @returns {boolean} 是否消费成功
+   */
+  async consumeSubscribeQuota(id) {
+    const db = await this.store.read();
+    const task = db.tasks.find((item) => item.id === id);
+    if (!task || !task.subscribeQuota || task.subscribeQuota <= 0) {
+      return false;
+    }
+
+    const updated = {
+      ...task,
+      subscribeQuota: task.subscribeQuota - 1,
+      updatedAt: isoNow()
+    };
+
+    await this.store.update((nextDb) => ({
+      ...nextDb,
+      tasks: nextDb.tasks.map((item) => (item.id === id ? updated : item))
+    }));
+
+    return true;
   }
 
   async deleteTask(id) {
@@ -204,6 +297,8 @@ class MonitorService {
       targetPrice,
       notifyOnDrop,
       pushplusToken: String(input.pushplusToken || "").trim(),
+      openid: String(input.openid || "").trim(),
+      subscribeEnabled: input.subscribeEnabled == null ? false : Boolean(input.subscribeEnabled),
       active: input.active == null ? true : Boolean(input.active)
     };
   }
@@ -211,6 +306,7 @@ class MonitorService {
   async createTask(input) {
     const payload = this.validateTaskInput(input);
     const now = isoNow();
+    const initialSubscribeQuota = Math.max(0, Number(input.subscribeQuota || 0));
 
     const task = {
       id: createId("task"),
@@ -222,6 +318,7 @@ class MonitorService {
       lastCheckedAt: null,
       nextCheckAt: now,
       unreadEvents: 0,
+      subscribeQuota: initialSubscribeQuota,
       createdAt: now,
       updatedAt: now
     };
@@ -236,12 +333,14 @@ class MonitorService {
     }));
 
     // 首次检查价格并发送创建通知
-    if (task.pushplusToken) {
+    const hasPushPlus = !!task.pushplusToken;
+    const hasSubscribe = !!task.openid && task.subscribeEnabled;
+    if (hasPushPlus || hasSubscribe) {
       this.#initialCheckAndNotify(task).catch((err) => {
         console.error("initial check error", err);
       });
     } else {
-      // 没有token也执行检查，只是不发送通知
+      // 没有通知渠道也执行检查，只是不发送通知
       this.checkTask(task.id).catch((err) => {
         console.error("initial check error", err);
       });
@@ -271,13 +370,40 @@ class MonitorService {
       };
 
       // 发送创建任务通知
-      const title = "✅ 监控任务已创建";
-      const content = this.#buildCreateNotification(task, summary);
-      const notifyResult = await this.notifier.send({
-        token: task.pushplusToken,
-        title,
-        content
-      });
+      const notifyResults = [];
+      const fromCity = getCityByCode(task.placeFrom);
+      const toCity = getCityByCode(task.placeTo);
+      const dateText = task.departDates.map((d) => `${d.slice(4, 6)}月${d.slice(6, 8)}日`).join("、");
+      const title = `${fromCity}飞${toCity}票价监控已创建`;
+      const content = `${dateText}${fromCity}飞${toCity} 当前最低价${summary?.minPrice || "暂无"}元`;
+
+      // PushPlus 通知
+      if (task.pushplusToken) {
+        const ppResult = await this.notifier.send({
+          token: task.pushplusToken,
+          title,
+          content
+        });
+        notifyResults.push({ channel: "pushplus", result: ppResult });
+      }
+
+      // 微信订阅消息通知（检查配额）
+      if (task.openid && task.subscribeEnabled && task.subscribeQuota > 0 && this.wxSubscribeNotifier) {
+        const { WxSubscribeNotifier } = require("./wx-subscribe-notifier");
+        const fromCity = getCityByCode(task.placeFrom);
+        const toCity = getCityByCode(task.placeTo);
+        const subscribeData = WxSubscribeNotifier.buildTaskCreatedData(task, summary, fromCity, toCity);
+        const wxResult = await this.wxSubscribeNotifier.send({
+          openid: task.openid,
+          data: subscribeData,
+          page: `pages/task-detail/task-detail?id=${task.id}`
+        });
+        // 发送成功后消耗配额
+        if (wxResult && wxResult.errcode === 0) {
+          await this.consumeSubscribeQuota(task.id);
+        }
+        notifyResults.push({ channel: "wxsubscribe", result: wxResult, quotaConsumed: wxResult?.errcode === 0 });
+      }
 
       await this.store.update((nextDb) => ({
         ...nextDb,
@@ -286,7 +412,7 @@ class MonitorService {
         )
       }));
 
-      return { task: updatedTask, notifyResult };
+      return { task: updatedTask, notifyResults };
     } catch (error) {
       const failedTask = {
         ...task,
@@ -351,7 +477,7 @@ class MonitorService {
 
     try {
       const snapshot = await this.provider.fetchPrices(task);
-      const changes = this.#compareSnapshot(task, snapshot);
+      const changes = this.#compareSnapshot(task, snapshot, db.histories[task.id] || []);
       const checkedAt = isoNow();
       const summary = buildSummaryFromSnapshot(snapshot);
       const nextCheckAt = new Date(
@@ -388,18 +514,40 @@ class MonitorService {
       });
 
       const notifyResults = [];
+      // PushPlus 通知
       if (notifyChanges.length > 0 && task.pushplusToken) {
-        // Merge all changes into one notification
-        const title = "机票价格提醒";
-        const content = this.#buildMergedNotification(task, notifyChanges);
+        const fromCity = getCityByCode(task.placeFrom);
+        const toCity = getCityByCode(task.placeTo);
+        // 取第一个变动作为代表
+        const firstChange = notifyChanges[0];
+        const isDrop = firstChange.type === "drop";
+        const title = `${fromCity}飞${toCity}机票${isDrop ? "降价" : "涨价"}了`;
+        const dateText = task.departDates.map((d) => `${d.slice(4, 6)}月${d.slice(6, 8)}日`).join("、");
+        const content = `${dateText} ${fromCity}飞${toCity}当前最低价${summary?.minPrice || firstChange.current}元，比上次${isDrop ? "跌" : "涨"}了${Math.abs(firstChange.delta)}元`;
         const result = await this.notifier.send({
           token: task.pushplusToken,
           title,
           content
         });
-        for (const change of notifyChanges) {
-          notifyResults.push({ change, result });
+        notifyResults.push({ channel: "pushplus", result });
+      }
+
+      // 微信订阅消息通知（检查配额）
+      if (notifyChanges.length > 0 && task.openid && task.subscribeEnabled && task.subscribeQuota > 0 && this.wxSubscribeNotifier) {
+        const { WxSubscribeNotifier } = require("./wx-subscribe-notifier");
+        const fromCity = getCityByCode(task.placeFrom);
+        const toCity = getCityByCode(task.placeTo);
+        const subscribeData = WxSubscribeNotifier.buildPriceChangeData(task, notifyChanges, fromCity, toCity);
+        const wxResult = await this.wxSubscribeNotifier.send({
+          openid: task.openid,
+          data: subscribeData,
+          page: `pages/task-detail/task-detail?id=${task.id}`
+        });
+        // 发送成功后消耗配额
+        if (wxResult && wxResult.errcode === 0) {
+          await this.consumeSubscribeQuota(task.id);
         }
+        notifyResults.push({ channel: "wxsubscribe", result: wxResult, quotaConsumed: wxResult?.errcode === 0 });
       }
 
       // Update unreadEvents count
@@ -491,8 +639,19 @@ class MonitorService {
     return baseline;
   }
 
-  #compareSnapshot(task, snapshot) {
+  #compareSnapshot(task, snapshot, histories = []) {
     const baseline = task.baseline || {};
+    
+    // 收集历史记录中已经出现过的所有 key（用于过滤重复的"首次"）
+    const seenKeys = new Set();
+    for (const history of histories) {
+      for (const change of history.changes || []) {
+        if (change.key) {
+          seenKeys.add(change.key);
+        }
+      }
+    }
+    
     const changes = [];
 
     if (snapshot.flightWay === "Roundtrip") {
@@ -500,7 +659,8 @@ class MonitorService {
         for (const [returnDate, price] of Object.entries(returnMap)) {
           const key = `${departDate}_${returnDate}`;
           const previous = baseline[key];
-          if (previous == null) {
+          // 如果历史记录中已经有过这个 key，就不再标记为"首次"
+          if (previous == null && !seenKeys.has(key)) {
             changes.push({
               type: "initial",
               key,
@@ -509,6 +669,7 @@ class MonitorService {
               current: price,
               delta: null
             });
+            seenKeys.add(key);
             continue;
           }
 
@@ -532,7 +693,8 @@ class MonitorService {
     for (const [date, priceItem] of Object.entries(snapshot.prices || {})) {
       const previous = baseline[date];
       const current = priceItem.best;
-      if (previous == null) {
+      // 如果历史记录中已经有过这个 key，就不再标记为"首次"
+      if (previous == null && !seenKeys.has(date)) {
         changes.push({
           type: "initial",
           key: date,
@@ -541,6 +703,7 @@ class MonitorService {
           current,
           delta: null
         });
+        seenKeys.add(date);
         continue;
       }
 
@@ -561,66 +724,57 @@ class MonitorService {
   }
 
   #buildMergedNotification(task, changes) {
-    const route = `${task.placeFrom} → ${task.placeTo}`;
+    const fromCity = getCityByCode(task.placeFrom);
+    const toCity = getCityByCode(task.placeTo);
     const wayLabel = task.flightWay === "Roundtrip" ? "往返" : "单程";
 
     const lines = [
-      `📢 机票价格变动提醒`,
-      "",
-      `**${task.name}**`,
-      ``,
-      `📍 航线：${route}`,
-      `🎫 类型：${wayLabel}`,
-      ""
+      `任务名称：${task.name}`,
+      `航线：${fromCity} → ${toCity} (${wayLabel})`
     ];
 
     for (const change of changes) {
-      const icon = change.type === "drop" ? "📉" : "📈";
       const trend = change.type === "drop" ? "下降" : "上涨";
-      lines.push(`${icon} ${change.label}`);
-      lines.push(`   变动：${trend} ${Math.abs(change.delta)}元`);
-      lines.push(`   当前：${change.current}元`);
-      lines.push(`   之前：${change.previous}元`);
-      lines.push("");
+      lines.push(`${change.label}`);
+      lines.push(`变动：${trend} ${Math.abs(change.delta)}元`);
+      lines.push(`当前：${change.current}元`);
+      lines.push(`之前：${change.previous}元`);
     }
 
     if (task.targetPrice) {
-      lines.push(`🎯 目标价：${task.targetPrice}元`);
+      lines.push(`目标价：${task.targetPrice}元`);
     }
 
-    lines.push(`⏰ 检查间隔：${task.checkIntervalSec}秒`);
+    lines.push(`下次检查：${task.checkIntervalSec}秒后`);
 
-    return lines.join("\n");
+    return lines.join("\r\n");
   }
 
   #buildCreateNotification(task, summary) {
-    const route = `${task.placeFrom} → ${task.placeTo}`;
+    const fromCity = getCityByCode(task.placeFrom);
+    const toCity = getCityByCode(task.placeTo);
     const wayLabel = task.flightWay === "Roundtrip" ? "往返" : "单程";
     const minPrice = summary?.minPrice || "暂无";
 
     const lines = [
-      `✅ 监控任务已创建`,
-      "",
-      `**${task.name}**`,
-      "",
-      `📍 航线：${route}`,
-      `🎫 类型：${wayLabel}`,
-      `💰 当前价：${minPrice}元`,
-      `📅 出发日期：${task.departDates.map((d) => `${d.slice(4, 6)}月${d.slice(6, 8)}日`).join("、")}`
+      `任务名称：${task.name}`,
+      `航线：${fromCity} → ${toCity} (${wayLabel})`,
+      `当前最低价：${minPrice}元`,
+      `出发日期：${task.departDates.map((d) => `${d.slice(4, 6)}月${d.slice(6, 8)}日`).join("、")}`
     ];
 
     if (task.flightWay === "Roundtrip" && task.returnDates?.length) {
-      lines.push(`🔄 返程日期：${task.returnDates.map((d) => `${d.slice(4, 6)}月${d.slice(6, 8)}日`).join("、")}`);
+      lines.push(`返程日期：${task.returnDates.map((d) => `${d.slice(4, 6)}月${d.slice(6, 8)}日`).join("、")}`);
     }
 
     if (task.targetPrice) {
-      lines.push(`🎯 目标价：${task.targetPrice}元`);
+      lines.push(`目标价：${task.targetPrice}元`);
     }
 
-    lines.push(`📊 变动阈值：${task.threshold}元`);
-    lines.push(`⏰ 检查间隔：${task.checkIntervalSec}秒`);
+    lines.push(`变动阈值：${task.threshold}元`);
+    lines.push(`检查间隔：${task.checkIntervalSec}秒`);
 
-    return lines.join("\n");
+    return lines.join("\r\n");
   }
 }
 
