@@ -47,21 +47,38 @@ Page({
         }
       }
 
-      const history = (historyRes.items || [])
-        .sort((a, b) => new Date(b.checkedAt).getTime() - new Date(a.checkedAt).getTime())
-        .map((item) => ({
-          ...item,
-          changes: (item.changes || []).filter((change) => change.type !== "initial")
-        }))
-        .filter((item) => item.changes.length > 0)
-        .map((item) => ({
-        ...item,
-        checkedAtText: formatDateTime(item.checkedAt),
-        changes: item.changes.map((change) => ({
-          ...change,
-          deltaAbs: change.delta == null ? "" : Math.abs(change.delta)
-        }))
-      }));
+      const sortedHistory = (historyRes.items || [])
+        .sort((a, b) => new Date(b.checkedAt).getTime() - new Date(a.checkedAt).getTime());
+
+      const history = sortedHistory
+        .map((item, index) => {
+          const previousItem = sortedHistory[index + 1] || null;
+          const currentMinPrice = item.summary?.minPrice;
+          const previousMinPrice = previousItem?.summary?.minPrice;
+          let changes = [];
+
+          if (
+            currentMinPrice != null &&
+            previousMinPrice != null &&
+            currentMinPrice !== previousMinPrice
+          ) {
+            const delta = currentMinPrice - previousMinPrice;
+            changes = [{
+              type: delta > 0 ? "rise" : "drop",
+              delta,
+              deltaAbs: Math.abs(delta),
+              current: currentMinPrice,
+              previous: previousMinPrice
+            }];
+          }
+
+          return {
+            ...item,
+            checkedAtText: formatDateTime(item.checkedAt),
+            changes
+          };
+        })
+        .filter((item) => item.changes.length > 0);
 
       const fromCity = getCityByCode(task.placeFrom) || task.placeFrom;
       const toCity = getCityByCode(task.placeTo) || task.placeTo;
