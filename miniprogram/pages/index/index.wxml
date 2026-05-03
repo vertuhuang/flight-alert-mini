@@ -2,12 +2,13 @@
   <!-- Task list -->
   <block wx:if="{{tasks.length}}">
     <block wx:for="{{tasks}}" wx:key="id">
-      <view class="card" data-id="{{item.id}}" bindtap="openTaskDetail" catch:longpress="onLongPress">
+      <view class="card" data-id="{{item.id}}" bindtap="openTaskDetail" catchlongpress="onLongPress">
         <!-- Route + Status + Price -->
         <view style="display: flex; align-items: center; justify-content: space-between;">
           <view style="display: flex; align-items: center; gap: 12rpx;">
             <view style="font-size: 32rpx; font-weight: 700; color: #0f172a;">{{item.routeText}}</view>
-            <view wx:if="{{!item.active}}" class="status-dot" title="已暂停"></view>
+            <t-tag wx:if="{{!item.active && !item.isExpired}}" theme="default" variant="light" size="small" style="flex-shrink: 0;">已暂停</t-tag>
+            <t-tag wx:if="{{item.isExpired}}" theme="warning" variant="light" size="small" style="flex-shrink: 0;">已过期</t-tag>
           </view>
           <view style="display: flex; align-items: center; gap: 12rpx;">
             <view wx:if="{{item.currentPrice != null}}" style="display: flex; align-items: baseline; gap: 4rpx;">
@@ -58,6 +59,7 @@
     items="{{actionItems}}"
     bind:selected="onActionSheetSelect"
     bind:cancel="onActionSheetClose"
+    bind:visible-change="onActionSheetVisibleChange"
   />
 
   <!-- Delete Dialog -->

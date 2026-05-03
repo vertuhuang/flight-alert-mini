@@ -4,7 +4,8 @@
     <view style="display: flex; align-items: center; justify-content: space-between;">
       <view style="display: flex; align-items: center; gap: 12rpx;">
         <view style="font-size: 34rpx; font-weight: 800; color: #0f172a;">{{task.headerTitle}}</view>
-        <view wx:if="{{!task.active}}" class="status-dot" title="已暂停"></view>
+        <t-tag wx:if="{{!task.active && !task.isExpired}}" theme="default" variant="light" size="small" style="flex-shrink: 0;">已暂停</t-tag>
+        <t-tag wx:if="{{task.isExpired}}" theme="warning" variant="light" size="small" style="flex-shrink: 0;">已过期</t-tag>
       </view>
       <t-icon name="more" size="40rpx" color="#0f172a" bindtap="onOpenActionSheet" />
     </view>
@@ -112,6 +113,7 @@
     items="{{actionItems}}"
     bind:selected="onActionSheetSelect"
     bind:cancel="onActionSheetClose"
+    bind:visible-change="onActionSheetVisibleChange"
   />
 
   <t-dialog

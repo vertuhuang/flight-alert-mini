@@ -538,8 +538,33 @@ class MonitorService {
       updatedAt: isoNow()
     };
 
-    if (patch.active === true && !current.active) {
+    // 关键字段变更时重置价格相关状态，触发重新检查
+    const needsReset = (
+      patch.placeFrom !== undefined && patch.placeFrom !== current.placeFrom ||
+      patch.placeTo !== undefined && patch.placeTo !== current.placeTo ||
+      patch.flightWay !== undefined && patch.flightWay !== current.flightWay ||
+      patch.departDates !== undefined && JSON.stringify(normalizeDateList(patch.departDates)) !== JSON.stringify(current.departDates) ||
+      patch.returnDates !== undefined && JSON.stringify(normalizeDateList(patch.returnDates)) !== JSON.stringify(current.returnDates || [])
+    );
+
+    if (needsReset) {
+      updated.baseline = {};
+      updated.latestSnapshot = null;
+      updated.latestSummary = null;
+      updated.latestChange = null;
+      updated.lastPriceChangeAt = null;
+      updated.lastError = null;
+      updated.seenPriceKeys = [];
       updated.nextCheckAt = isoNow();
+    } else {
+      // 即使关键字段未变，也清除错误状态
+      if (current.lastError) {
+        updated.lastError = null;
+      }
+      // 从暂停恢复活跃时重置 nextCheckAt
+      if (patch.active === true && !current.active) {
+        updated.nextCheckAt = isoNow();
+      }
     }
 
     if (typeof this.store.writeTask === "function") {
@@ -552,6 +577,21 @@ class MonitorService {
     }
 
     return updated;
+  }
+
+  /**
+   * 判断任务是否已过期（所有出发日期都已过去）
+   */
+  #isTaskExpired(task) {
+    if (!task || !task.departDates || !task.departDates.length) {
+      return false;
+    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+    // 如果最大出发日期 < 今天，则已过期
+    const maxDepartDate = Math.max(...task.departDates.map(d => Number(d)));
+    return maxDepartDate < Number(todayStr);
   }
 
   async checkTask(id) {
@@ -574,6 +614,20 @@ class MonitorService {
 
     if (!task) {
       throw new Error("task_not_found");
+    }
+
+    // 自动过期检查：如果任务已过期，自动暂停并不再检查价格
+    if (task.active && this.#isTaskExpired(task)) {
+      const updated = { ...task, active: false, updatedAt: isoNow() };
+      if (typeof this.store.writeTask === "function") {
+        await this.store.writeTask(updated);
+      } else {
+        await this.store.update((nextDb) => ({
+          ...nextDb,
+          tasks: nextDb.tasks.map((item) => (item.id === id ? updated : item))
+        }));
+      }
+      return { task: updated, changes: [], skipped: 'expired' };
     }
 
     try {

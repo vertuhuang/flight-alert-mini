@@ -31,7 +31,17 @@ Page({
         request({ url: "/tasks" })
       ]);
 
+      // 计算今天日期字符串 YYYYMMDD
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+
       const tasks = (tasksRes.items || []).map((task) => {
+        // 判断是否过期：最大出发日期 < 今天
+        let isExpired = false;
+        if (task.departDates && task.departDates.length) {
+          const maxDepartDate = Math.max(...task.departDates.map(d => Number(d)));
+          isExpired = maxDepartDate < Number(todayStr);
+        }
         // 构建最新变价信息
         let latestChangeInfo = null;
         if (task.latestChange) {
@@ -48,6 +58,7 @@ Page({
         }
         return {
           ...task,
+          isExpired,
           currentPrice,
           routeText: `${getCityByCode(task.placeFrom) || task.placeFrom} → ${getCityByCode(task.placeTo) || task.placeTo}`,
           departDatesText: joinDates(task.departDates),
@@ -90,6 +101,12 @@ Page({
     });
   },
 
+  goEdit(taskId) {
+    wx.navigateTo({
+      url: `/pages/task-form/task-form?id=${taskId}`
+    });
+  },
+
   onLongPress(event) {
     // 阻止事件冒泡，防止触发 bindtap
     if (event.stopPropagation) {
@@ -99,12 +116,22 @@ Page({
     const task = this.data.tasks.find((t) => t.id === id);
     if (!task) return;
 
-    const actionItems = [
-      { label: "查看详情" },
-      { label: "重新获取价格" },
-      { label: task.active ? "暂停监控" : "启用监控" },
-      { label: "删除任务" }
-    ];
+    let actionItems;
+    if (task.isExpired) {
+      // 已过期任务：删除当前任务、删除所有过期任务
+      actionItems = [
+        { label: "删除当前任务" },
+        { label: "删除所有过期任务" }
+      ];
+    } else {
+      // 未过期任务：与详情页"更多"相同
+      actionItems = [
+        { label: "重新获取价格" },
+        { label: "编辑" },
+        { label: task.active ? "暂停" : "启用" },
+        { label: "删除任务" }
+      ];
+    }
 
     this.setData({
       showActionSheet: true,
@@ -118,23 +145,50 @@ Page({
     this.setData({ showActionSheet: false });
   },
 
+  onActionSheetVisibleChange(e) {
+    // 点击遮罩或关闭按钮时，visible 变为 false
+    if (!e.detail.visible) {
+      this.setData({ showActionSheet: false });
+    }
+  },
+
+  confirmDelete() {
+    this.setData({ showDeleteDialog: true });
+  },
+
   onActionSheetSelect(event) {
     const index = event.detail.index;
     this.setData({ showActionSheet: false });
 
-    switch (index) {
-      case 0:
-        this.openTaskDetail({ currentTarget: { dataset: { id: this.data.selectedTaskId } } });
-        break;
-      case 1:
-        this.checkNow(this.data.selectedTaskId);
-        break;
-      case 2:
-        this.toggleActive(this.data.selectedTaskId, this.data.selectedTask);
-        break;
-      case 3:
-        this.setData({ showDeleteDialog: true });
-        break;
+    const task = this.data.selectedTask;
+    if (!task) return;
+
+    if (task.isExpired) {
+      // 已过期任务：0=删除当前任务, 1=删除所有过期任务
+      switch (index) {
+        case 0:
+          this.confirmDelete();
+          break;
+        case 1:
+          this.confirmDeleteAllExpired();
+          break;
+      }
+    } else {
+      // 未过期任务：0=重新获取价格, 1=编辑, 2=暂停/启用, 3=删除任务
+      switch (index) {
+        case 0:
+          this.checkNow(this.data.selectedTaskId);
+          break;
+        case 1:
+          this.goEdit(this.data.selectedTaskId);
+          break;
+        case 2:
+          this.toggleActive(this.data.selectedTaskId, this.data.selectedTask);
+          break;
+        case 3:
+          this.confirmDelete();
+          break;
+      }
     }
   },
 
@@ -158,6 +212,14 @@ Page({
   },
 
   async toggleActive(taskId, task) {
+    // 已过期任务不允许启用
+    if (!task.active && task.isExpired) {
+      wx.showToast({
+        title: "任务已过期，无法启用",
+        icon: "none"
+      });
+      return;
+    }
     const nextActive = !task.active;
     try {
       await request({
@@ -197,5 +259,57 @@ Page({
         icon: "none"
       });
     }
+  },
+
+  confirmDeleteAllExpired() {
+    const expiredCount = this.data.tasks.filter(t => t.isExpired).length;
+    if (expiredCount === 0) {
+      wx.showToast({ title: "没有过期任务", icon: "none" });
+      return;
+    }
+    wx.showModal({
+      title: "确认删除",
+      content: `确定要删除所有过期任务吗？共 ${expiredCount} 个任务，此操作不可恢复。`,
+      confirmText: "删除",
+      confirmColor: "#dc2626",
+      success: (res) => {
+        if (res.confirm) {
+          this.deleteAllExpiredTasks();
+        }
+      }
+    });
+  },
+
+  async deleteAllExpiredTasks() {
+    const expiredTasks = this.data.tasks.filter(t => t.isExpired);
+    if (!expiredTasks.length) {
+      wx.showToast({ title: "没有过期任务", icon: "none" });
+      return;
+    }
+
+    wx.showLoading({ title: `正在删除${expiredTasks.length}个任务...` });
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const task of expiredTasks) {
+      try {
+        await request({
+          url: `/tasks/${task.id}`,
+          method: "DELETE"
+        });
+        successCount++;
+      } catch (error) {
+        failCount++;
+        console.error(`删除任务 ${task.id} 失败:`, error);
+      }
+    }
+
+    wx.hideLoading();
+    if (failCount === 0) {
+      wx.showToast({ title: `已删除${successCount}个任务`, icon: "success" });
+    } else {
+      wx.showToast({ title: `删除完成，${successCount}成功${failCount}失败`, icon: "none" });
+    }
+    this.loadData();
   }
 });

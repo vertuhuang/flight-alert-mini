@@ -5,3 +5,8 @@ backend/node_modules
 backend/data/db.json
 backend/data/*.log
 miniprogram/project.private.config.json
+.env
+.env.*
+backend/.env*
+.workbuddy/
+

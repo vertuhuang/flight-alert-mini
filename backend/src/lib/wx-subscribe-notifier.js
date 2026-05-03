@@ -134,28 +134,41 @@ class WxSubscribeNotifier {
    *
    * Template: "机票价格变动提醒"
    * Fields:
-   *   character_string1: 编号 (出发地→目的地 日期)
+   *   character_string1: 编号 (纯字母数字格式: SZX-PEK-20260508)
    *   amount4: 当前价格
    *   time11: 价格变动时间
    *   amount14: 商品差价
    */
+  /**
+   * character_string1 类型只允许字母、数字，不支持中文和特殊符号。
+   * 格式：SZX-PEK-20260508
+   */
+  static #buildRouteCode(task, changeType) {
+    const from = task.placeFrom || "";
+    const to = task.placeTo || "";
+    const dates = (task.departDates || []).join("-");
+    let code = `${from}-${to}-${dates}`;
+    // 涨跌标记：UP=涨价 DN=降价
+    if (changeType === "rise") {
+      code += "-UP";
+    } else if (changeType === "drop") {
+      code += "-DN";
+    }
+    return code.slice(0, 32);
+  }
+
   static buildPriceChangeData(task, changes, fromCity, toCity) {
-    const from = fromCity || task.placeFrom;
-    const to = toCity || task.placeTo;
-    const route = `${from}→${to}`;
-    const dates = task.departDates ? task.departDates.join(",") : "";
-    
-    // 编号：出发地→目的地（日期）
-    const code = `${route}（${dates}）`.slice(0, 32);
-    
+    const changeType = changes.length > 0 ? changes[0].type : null;
+    const code = WxSubscribeNotifier.#buildRouteCode(task, changeType);
+
     // 当前价格
-    const currentPrice = changes.length > 0 ? `${changes[0].current}` : "暂无";
-    
-    // 价格变动时间
-    const now = new Date();
-    const timeStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    
-    // 商品差价（取第一个变动的差值）
+    const currentPrice = changes.length > 0 ? `${changes[0].current}` : "0";
+
+    // 价格变动时间（东八区）
+    const now = new Date(Date.now() + 8 * 60 * 60 * 1000);
+    const timeStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")} ${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
+
+    // 商品差价（纯数字，涨跌信息已在编号字段体现）
     const diff = changes.length > 0 ? `${Math.abs(changes[0].delta)}` : "0";
 
     return {
@@ -170,27 +183,21 @@ class WxSubscribeNotifier {
    * Build template data for a task creation notification.
    * Template: "机票价格变动提醒"
    * Fields:
-   *   character_string1: 编号 (出发地→目的地 日期)
+   *   character_string1: 编号 (纯字母数字格式)
    *   amount4: 当前价格
    *   time11: 价格变动时间
    *   amount14: 商品差价
    */
   static buildTaskCreatedData(task, summary, fromCity, toCity) {
-    const from = fromCity || task.placeFrom;
-    const to = toCity || task.placeTo;
-    const route = `${from}→${to}`;
-    const dates = task.departDates ? task.departDates.join(",") : "";
-    
-    // 编号：出发地→目的地（日期）
-    const code = `${route}（${dates}）`.slice(0, 32);
+    const code = WxSubscribeNotifier.#buildRouteCode(task, null);
     
     // 当前价格
-    const minPrice = summary?.minPrice ? `${summary.minPrice}` : "暂无";
+    const minPrice = summary?.minPrice ? `${summary.minPrice}` : "0";
     
-    // 价格变动时间
-    const now = new Date();
-    const timeStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    
+    // 价格变动时间（东八区）
+    const now = new Date(Date.now() + 8 * 60 * 60 * 1000);
+    const timeStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")} ${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
+
     // 任务创建时差价为 0
     const diff = "0";
 

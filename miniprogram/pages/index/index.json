@@ -5,6 +5,8 @@
     "t-tag": "tdesign-miniprogram/tag/tag",
     "t-badge": "tdesign-miniprogram/badge/badge",
     "t-empty": "tdesign-miniprogram/empty/empty",
-    "t-fab": "tdesign-miniprogram/fab/fab"
+    "t-fab": "tdesign-miniprogram/fab/fab",
+    "t-action-sheet": "tdesign-miniprogram/action-sheet/action-sheet",
+    "t-dialog": "tdesign-miniprogram/dialog/dialog"
   }
 }

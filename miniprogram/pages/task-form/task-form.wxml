@@ -23,12 +23,12 @@
       <t-cell title="出发日期" arrow bindtap="openDepartDatePicker" t-class="custom-cell">
         <text slot="note" style="color: {{departDateLabel ? '#0f172a' : 'rgba(0, 0, 0, 0.4)'}};">{{departDateLabel || '请选择'}}</text>
       </t-cell>
-      <t-date-time-picker wx:if="{{showDepartDatePicker}}" visible="{{showDepartDatePicker}}" mode="date" title="选择出发日期" value="{{departDateValue}}" bind:confirm="onDepartDateConfirm" bind:cancel="onDepartDateCancel" />
+      <t-date-time-picker wx:if="{{showDepartDatePicker}}" visible="{{showDepartDatePicker}}" mode="date" title="选择出发日期" value="{{departDateValue}}" start="{{todayStr}}" bind:confirm="onDepartDateConfirm" bind:cancel="onDepartDateCancel" />
 
       <t-cell wx:if="{{flightWayIndex === 1}}" title="返程日期" arrow bindtap="openReturnDatePicker" t-class="custom-cell">
         <text slot="note" style="color: {{returnDateLabel ? '#0f172a' : 'rgba(0, 0, 0, 0.4)'}};">{{returnDateLabel || '请选择'}}</text>
       </t-cell>
-      <t-date-time-picker wx:if="{{flightWayIndex === 1 && showReturnDatePicker}}" visible="{{showReturnDatePicker}}" mode="date" title="选择返程日期" value="{{returnDateValue}}" bind:confirm="onReturnDateConfirm" bind:cancel="onReturnDateCancel" />
+      <t-date-time-picker wx:if="{{flightWayIndex === 1 && showReturnDatePicker}}" visible="{{showReturnDatePicker}}" mode="date" title="选择返程日期" value="{{returnDateValue}}" start="{{todayStr}}" bind:confirm="onReturnDateConfirm" bind:cancel="onReturnDateCancel" />
     </view>
   </view>
 

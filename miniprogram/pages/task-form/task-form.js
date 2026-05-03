@@ -34,6 +34,10 @@ Page({
     flightWayValue: FLIGHT_WAYS[0],
     flightWayOptions: [FLIGHT_WAY_OPTIONS],
     airportOptions: AIRPORT_OPTIONS,
+    // 今天日期字符串（YYYY-MM-DD），用于限制日期选择器最小可选日期
+    todayStr: "",
+    // 今天 00:00:00 的时间戳（毫秒），用于限制日期选择器最小可选日期
+    todayTimestamp: 0,
     form: {
       placeFrom: "",
       placeTo: "",
@@ -64,14 +68,22 @@ Page({
   },
 
   onLoad(query) {
+    // 计算今天日期字符串和今天零点的时间戳，用于限制日期选择器最小可选日期
+    const now = new Date();
+    const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayTimestamp = todayMidnight.getTime();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
     if (query.id) {
-      this.setData({ isEdit: true, taskId: query.id });
+      this.setData({ isEdit: true, taskId: query.id, todayTimestamp, todayStr });
       this.loadTask(query.id);
     } else {
       const savedToken = wx.getStorageSync("pushplus_token");
-      if (savedToken) {
-        this.setData({ "form.pushplusToken": savedToken });
-      }
+      this.setData({
+        todayTimestamp,
+        todayStr,
+        "form.pushplusToken": savedToken || ""
+      });
     }
   },
 
@@ -86,14 +98,34 @@ Page({
       const fromIndex = AIRPORT_OPTIONS.findIndex((o) => o.value === task.placeFrom);
       const toIndex = AIRPORT_OPTIONS.findIndex((o) => o.value === task.placeTo);
 
+      // 检查日期是否早于今天，如果是则自动调整为今天
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+      let finalDepartDate = departDate;
+      let finalReturnDate = returnDate;
+      let dateAdjusted = false;
+
+      if (departDate && Number(departDate) < Number(todayStr)) {
+        finalDepartDate = todayStr;
+        dateAdjusted = true;
+      }
+      if (returnDate && Number(returnDate) < Number(todayStr)) {
+        finalReturnDate = todayStr;
+        dateAdjusted = true;
+      }
+
+      if (dateAdjusted) {
+        wx.showToast({ title: "原日期已过期，已自动调整为今天", icon: "none", duration: 2000 });
+      }
+
       this.setData({
         flightWayIndex,
         flightWayValue: FLIGHT_WAYS[flightWayIndex],
         form: {
           placeFrom: task.placeFrom || "",
           placeTo: task.placeTo || "",
-          departDates: departDate,
-          returnDates: returnDate,
+          departDates: finalDepartDate,
+          returnDates: finalReturnDate,
           threshold: String(task.threshold || 50),
           targetPrice: task.targetPrice ? String(task.targetPrice) : "",
           notifyOnDrop: task.notifyOnDrop !== false,
@@ -106,10 +138,10 @@ Page({
         placeToText: task.placeTo ? getCityByCode(task.placeTo) || task.placeTo : "",
         fromPickerIndex: fromIndex >= 0 ? fromIndex : 0,
         toPickerIndex: toIndex >= 0 ? toIndex : 0,
-        departDateLabel: departDate ? formatDateLong(departDate) : "",
-        departDateValue: departDate ? `${departDate.slice(0, 4)}-${departDate.slice(4, 6)}-${departDate.slice(6, 8)}` : "",
-        returnDateLabel: returnDate ? formatDateLong(returnDate) : "",
-        returnDateValue: returnDate ? `${returnDate.slice(0, 4)}-${returnDate.slice(4, 6)}-${returnDate.slice(6, 8)}` : ""
+        departDateLabel: finalDepartDate ? formatDateLong(finalDepartDate) : "",
+        departDateValue: finalDepartDate ? `${finalDepartDate.slice(0, 4)}-${finalDepartDate.slice(4, 6)}-${finalDepartDate.slice(6, 8)}` : "",
+        returnDateLabel: finalReturnDate ? formatDateLong(finalReturnDate) : "",
+        returnDateValue: finalReturnDate ? `${finalReturnDate.slice(0, 4)}-${finalReturnDate.slice(4, 6)}-${finalReturnDate.slice(6, 8)}` : ""
       });
     } catch (error) {
       wx.showToast({ title: "加载任务失败", icon: "none" });
@@ -168,24 +200,22 @@ Page({
 
   openDepartDatePicker() {
     let { departDateValue } = this.data;
-    if (!departDateValue) {
-      const now = new Date();
-      const y = now.getFullYear();
-      const m = String(now.getMonth() + 1).padStart(2, "0");
-      const d = String(now.getDate()).padStart(2, "0");
-      departDateValue = `${y}-${m}-${d}`;
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+    if (!departDateValue || departDateValue < todayStr) {
+      departDateValue = todayStr;
     }
     this.setData({ departDateValue, showDepartDatePicker: true });
   },
 
   openReturnDatePicker() {
     let { returnDateValue } = this.data;
-    if (!returnDateValue) {
-      const now = new Date();
-      const y = now.getFullYear();
-      const m = String(now.getMonth() + 1).padStart(2, "0");
-      const d = String(now.getDate()).padStart(2, "0");
-      returnDateValue = `${y}-${m}-${d}`;
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+    if (!returnDateValue || returnDateValue < todayStr) {
+      returnDateValue = todayStr;
     }
     this.setData({ returnDateValue, showReturnDatePicker: true });
   },
@@ -250,6 +280,22 @@ Page({
       return;
     }
 
+    // 校验出发日期不能早于今天
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    if (!form.departDates) {
+      wx.showToast({ title: "请选择出发日期", icon: "none" });
+      return;
+    }
+    if (Number(form.departDates) < Number(todayStr)) {
+      wx.showToast({ title: "出发日期不能早于今天", icon: "none" });
+      return;
+    }
+    if (flightWayIndex === 1 && form.returnDates && Number(form.returnDates) < Number(todayStr)) {
+      wx.showToast({ title: "返程日期不能早于今天", icon: "none" });
+      return;
+    }
+
     const autoName = generateTaskName(form, flightWayIndex);
     let subscribeAccepted = false;
 
@@ -266,8 +312,7 @@ Page({
       placeFrom: form.placeFrom.toUpperCase(),
       placeTo: form.placeTo.toUpperCase(),
       targetPrice: form.targetPrice ? Number(form.targetPrice) : null,
-      openid,
-      subscribeQuota: 0
+      openid
     };
 
     this.setData({ submitting: true });
