@@ -2,6 +2,7 @@ const { request } = require("../../utils/request");
 const { formatDateTime, joinDates, joinDatesShort } = require("../../utils/format");
 const { getCityByCode } = require("../../utils/airports");
 const { requestSubscribe, markSubscribed, SUBSCRIBE_TEMPLATE_ID } = require("../../utils/subscribe");
+const { getCurrencyName } = require("../../utils/currencies");
 
 Page({
   data: {
@@ -10,6 +11,7 @@ Page({
     checking: false,
     task: null,
     history: [],
+    isFx: false,
     showDeleteDialog: false,
     showActionSheet: false,
     actionItems: [],
@@ -47,9 +49,12 @@ Page({
         }
       }
 
-      const sortedHistory = (historyRes.items || [])
-        .sort((a, b) => new Date(b.checkedAt).getTime() - new Date(a.checkedAt).getTime());
+      const isFx = task.monitorType === "exchange_rate";
+      const sortedHistory = [...(historyRes?.items || [])].sort((a, b) => {
+        return new Date(b.checkedAt).getTime() - new Date(a.checkedAt).getTime();
+      });
 
+      // 预格式化历史记录的显示文本
       const history = sortedHistory
         .map((item, index) => {
           const previousItem = sortedHistory[index + 1] || null;
@@ -72,28 +77,54 @@ Page({
             }];
           }
 
+          // 预格式化用于显示的文本
+          const priceText = currentMinPrice != null
+            ? (isFx ? currentMinPrice.toFixed(4) : currentMinPrice + " 元")
+            : null;
+          const deltaText = changes.length > 0
+            ? (isFx ? changes[0].deltaAbs.toFixed(4) : changes[0].deltaAbs + "元")
+            : null;
+
           return {
             ...item,
             checkedAtText: formatDateTime(item.checkedAt),
-            changes
+            changes,
+            priceText,
+            deltaText
           };
         })
         .filter((item) => item.changes.length > 0);
 
-      const fromCity = getCityByCode(task.placeFrom) || task.placeFrom;
-      const toCity = getCityByCode(task.placeTo) || task.placeTo;
-      const datesShort = joinDatesShort(task.departDates);
+      let headerTitle, placeFromText, placeToText, departDatesText, returnDatesText;
+      if (isFx) {
+        const baseName = getCurrencyName(task.baseCurrency);
+        const quoteName = getCurrencyName(task.quoteCurrency);
+        headerTitle = `${baseName} / ${quoteName} 汇率监控`;
+        placeFromText = baseName;
+        placeToText = quoteName;
+        departDatesText = "实时";
+        returnDatesText = "";
+      } else {
+        const fromCity = getCityByCode(task.placeFrom) || task.placeFrom;
+        const toCity = getCityByCode(task.placeTo) || task.placeTo;
+        const datesShort = joinDatesShort(task.departDates);
+        headerTitle = `${fromCity} / ${toCity}（${datesShort}）`;
+        placeFromText = fromCity;
+        placeToText = toCity;
+        departDatesText = joinDates(task.departDates);
+        returnDatesText = joinDates(task.returnDates);
+      }
 
-      // 计算是否过期
+      // 计算是否过期（仅机票任务）
       let isExpired = false;
-      if (task.departDates && task.departDates.length) {
+      if (!isFx && task.departDates && task.departDates.length) {
         const now = new Date();
         const todayStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
         const maxDepartDate = Math.max(...task.departDates.map(d => Number(d)));
         isExpired = maxDepartDate < Number(todayStr);
       }
 
-      const actionItems = task.isExpired
+      const actionItems = isExpired
         ? [
             { label: "删除当前任务" },
             { label: "删除所有过期任务" }
@@ -105,17 +136,25 @@ Page({
             { label: "删除任务" }
           ];
 
+      // 预格式化当前价格/汇率的显示文本
+      const currentMinPrice = task.latestSummary?.minPrice;
+      const currentPriceText = currentMinPrice != null
+        ? (isFx ? currentMinPrice.toFixed(4) : String(currentMinPrice))
+        : null;
+
       this.setData({
+        isFx,
         task: {
           ...task,
           isExpired,
-          placeFromText: fromCity,
-          placeToText: toCity,
-          headerTitle: `${fromCity} → ${toCity}（${datesShort}）`,
-          departDatesText: joinDates(task.departDates),
-          returnDatesText: joinDates(task.returnDates),
+          placeFromText,
+          placeToText,
+          headerTitle,
+          departDatesText,
+          returnDatesText,
           lastCheckedText: formatDateTime(task.lastCheckedAt),
-          nextCheckText: formatDateTime(task.nextCheckAt)
+          nextCheckText: formatDateTime(task.nextCheckAt),
+          currentPriceText
         },
         history,
         actionItems,

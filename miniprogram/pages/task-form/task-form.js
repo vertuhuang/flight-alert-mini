@@ -2,6 +2,7 @@ const { request } = require("../../utils/request");
 const { getCityByCode, AIRPORTS } = require("../../utils/airports");
 const { formatDateShort, formatDateLong } = require("../../utils/format");
 const { requestSubscribe, ensureOpenid, markSubscribed, SUBSCRIBE_TEMPLATE_ID } = require("../../utils/subscribe");
+const { CURRENCIES } = require("../../utils/currencies");
 
 const FLIGHT_WAYS = ["Oneway", "Roundtrip"];
 const FLIGHT_WAY_LABELS = ["单程", "往返"];
@@ -11,8 +12,18 @@ const FLIGHT_WAY_OPTIONS = [
 ];
 
 const AIRPORT_OPTIONS = AIRPORTS.map((a) => ({ label: `${a.city} (${a.code})`, value: a.code }));
+const CURRENCY_OPTIONS = CURRENCIES.map((c) => ({ label: `${c.name} (${c.code})`, value: c.code }));
 
-function generateTaskName(form, flightWayIndex) {
+const MONITOR_TYPES = ["flight", "exchange_rate"];
+
+function generateTaskName(form, flightWayIndex, monitorType) {
+  if (monitorType === "exchange_rate") {
+    const base = form.baseCurrency || "";
+    const quote = form.quoteCurrency || "";
+    if (base && quote) return `${base}/${quote} 汇率监控`;
+    return "";
+  }
+
   const departDate = form.departDates || "";
   const fromCity = getCityByCode(form.placeFrom) || form.placeFrom;
   const toCity = getCityByCode(form.placeTo) || form.placeTo;
@@ -27,6 +38,8 @@ function generateTaskName(form, flightWayIndex) {
 
 Page({
   data: {
+    monitorTypeIndex: 0,
+    monitorTypeValue: MONITOR_TYPES[0],
     isEdit: false,
     taskId: "",
     flightWayLabels: FLIGHT_WAY_LABELS,
@@ -34,6 +47,11 @@ Page({
     flightWayValue: FLIGHT_WAYS[0],
     flightWayOptions: [FLIGHT_WAY_OPTIONS],
     airportOptions: AIRPORT_OPTIONS,
+    currencyOptions: CURRENCY_OPTIONS,
+    baseCurrencyIndex: 0,
+    quoteCurrencyIndex: 0,
+    baseCurrencyText: "",
+    quoteCurrencyText: "",
     // 今天日期字符串（YYYY-MM-DD），用于限制日期选择器最小可选日期
     todayStr: "",
     // 今天 00:00:00 的时间戳（毫秒），用于限制日期选择器最小可选日期
@@ -41,6 +59,8 @@ Page({
     form: {
       placeFrom: "",
       placeTo: "",
+      baseCurrency: "",
+      quoteCurrency: "",
       departDates: "",
       returnDates: "",
       threshold: "50",
@@ -64,6 +84,8 @@ Page({
     returnDateValue: "",
     showDepartDatePicker: false,
     showReturnDatePicker: false,
+    showBaseCurrencyPicker: false,
+    showQuoteCurrencyPicker: false,
     submitting: false
   },
 
@@ -79,17 +101,32 @@ Page({
       this.loadTask(query.id);
     } else {
       const savedToken = wx.getStorageSync("pushplus_token");
-      this.setData({
+      const isFx = query.monitorType === "exchange_rate";
+      const baseData = {
         todayTimestamp,
         todayStr,
         "form.pushplusToken": savedToken || ""
-      });
+      };
+
+      // 如果从 FAB 浮层传入了监控类型参数，预选择
+      if (isFx) {
+        baseData.monitorTypeIndex = 1;
+        baseData.monitorTypeValue = "exchange_rate";
+        baseData["form.threshold"] = "0.01";
+        baseData["form.checkIntervalSec"] = "300";
+      }
+
+      wx.setNavigationBarTitle({ title: isFx ? "创建汇率监控" : "创建机票监控" });
+      this.setData(baseData);
     }
   },
 
   async loadTask(id) {
     try {
       const task = await request({ url: `/tasks/${id}` });
+      const monitorType = task.monitorType || "flight";
+      const monitorTypeIndex = MONITOR_TYPES.indexOf(monitorType);
+      wx.setNavigationBarTitle({ title: `编辑${monitorType === "exchange_rate" ? "汇率" : "机票"}监控` });
       const flightWayIndex = task.flightWay === "Roundtrip" ? 1 : 0;
       const departDates = task.departDates || [];
       const returnDates = task.returnDates || [];
@@ -97,6 +134,8 @@ Page({
       const returnDate = Array.isArray(returnDates) ? returnDates[0] || "" : returnDates;
       const fromIndex = AIRPORT_OPTIONS.findIndex((o) => o.value === task.placeFrom);
       const toIndex = AIRPORT_OPTIONS.findIndex((o) => o.value === task.placeTo);
+      const baseIndex = CURRENCY_OPTIONS.findIndex((o) => o.value === task.baseCurrency);
+      const quoteIndex = CURRENCY_OPTIONS.findIndex((o) => o.value === task.quoteCurrency);
 
       // 检查日期是否早于今天，如果是则自动调整为今天
       const now = new Date();
@@ -119,17 +158,25 @@ Page({
       }
 
       this.setData({
+        monitorType,
+        monitorTypeIndex: monitorTypeIndex >= 0 ? monitorTypeIndex : 0,
         flightWayIndex,
         flightWayValue: FLIGHT_WAYS[flightWayIndex],
+        baseCurrencyIndex: baseIndex >= 0 ? baseIndex : 0,
+        quoteCurrencyIndex: quoteIndex >= 0 ? quoteIndex : 0,
+        baseCurrencyText: task.baseCurrency ? (CURRENCIES.find(c => c.code === task.baseCurrency)?.name || task.baseCurrency) : "",
+        quoteCurrencyText: task.quoteCurrency ? (CURRENCIES.find(c => c.code === task.quoteCurrency)?.name || task.quoteCurrency) : "",
         form: {
           placeFrom: task.placeFrom || "",
           placeTo: task.placeTo || "",
+          baseCurrency: task.baseCurrency || "",
+          quoteCurrency: task.quoteCurrency || "",
           departDates: finalDepartDate,
           returnDates: finalReturnDate,
-          threshold: String(task.threshold || 50),
+          threshold: String(task.threshold || (monitorType === "exchange_rate" ? 0.01 : 50)),
           targetPrice: task.targetPrice ? String(task.targetPrice) : "",
           notifyOnDrop: task.notifyOnDrop !== false,
-          checkIntervalSec: String(task.checkIntervalSec || 600),
+          checkIntervalSec: String(task.checkIntervalSec || (monitorType === "exchange_rate" ? 300 : 600)),
           pushplusToken: task.pushplusToken || "",
           subscribeEnabled: task.subscribeEnabled !== false,
           active: task.active !== false
@@ -196,6 +243,42 @@ Page({
 
   onFlightWayCancel() {
     this.setData({ showFlightWayPicker: false });
+  },
+
+  openBaseCurrencyPicker() {
+    this.setData({ showBaseCurrencyPicker: true });
+  },
+
+  openQuoteCurrencyPicker() {
+    this.setData({ showQuoteCurrencyPicker: true });
+  },
+
+  onBaseCurrencyChange(e) {
+    const value = e.detail.value[0];
+    const index = CURRENCY_OPTIONS.findIndex((o) => o.value === value);
+    if (index >= 0) {
+      const currency = CURRENCIES[index];
+      this.setData({
+        baseCurrencyIndex: index,
+        "form.baseCurrency": currency.code,
+        baseCurrencyText: currency.name,
+        showBaseCurrencyPicker: false
+      });
+    }
+  },
+
+  onQuoteCurrencyChange(e) {
+    const value = e.detail.value[0];
+    const index = CURRENCY_OPTIONS.findIndex((o) => o.value === value);
+    if (index >= 0) {
+      const currency = CURRENCIES[index];
+      this.setData({
+        quoteCurrencyIndex: index,
+        "form.quoteCurrency": currency.code,
+        quoteCurrencyText: currency.name,
+        showQuoteCurrencyPicker: false
+      });
+    }
   },
 
   openDepartDatePicker() {
@@ -269,34 +352,52 @@ Page({
   async submit() {
     if (this.data.submitting) return;
 
-    const { form, flightWayIndex, isEdit, taskId } = this.data;
+    const { form, monitorTypeIndex, isEdit, taskId } = this.data;
+    const monitorType = MONITOR_TYPES[monitorTypeIndex];
 
-    if (!form.placeFrom) {
-      wx.showToast({ title: "请选择出发城市", icon: "none" });
-      return;
-    }
-    if (!form.placeTo) {
-      wx.showToast({ title: "请选择到达城市", icon: "none" });
-      return;
+    if (monitorType === "exchange_rate") {
+      // 汇率监控校验
+      if (!form.baseCurrency) {
+        wx.showToast({ title: "请选择基础货币", icon: "none" });
+        return;
+      }
+      if (!form.quoteCurrency) {
+        wx.showToast({ title: "请选择报价货币", icon: "none" });
+        return;
+      }
+      if (form.baseCurrency === form.quoteCurrency) {
+        wx.showToast({ title: "基础货币和报价货币不能相同", icon: "none" });
+        return;
+      }
+    } else {
+      // 机票监控校验
+      if (!form.placeFrom) {
+        wx.showToast({ title: "请选择出发城市", icon: "none" });
+        return;
+      }
+      if (!form.placeTo) {
+        wx.showToast({ title: "请选择到达城市", icon: "none" });
+        return;
+      }
+
+      // 校验出发日期不能早于今天
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+      if (!form.departDates) {
+        wx.showToast({ title: "请选择出发日期", icon: "none" });
+        return;
+      }
+      if (Number(form.departDates) < Number(todayStr)) {
+        wx.showToast({ title: "出发日期不能早于今天", icon: "none" });
+        return;
+      }
+      if (this.data.flightWayIndex === 1 && form.returnDates && Number(form.returnDates) < Number(todayStr)) {
+        wx.showToast({ title: "返程日期不能早于今天", icon: "none" });
+        return;
+      }
     }
 
-    // 校验出发日期不能早于今天
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-    if (!form.departDates) {
-      wx.showToast({ title: "请选择出发日期", icon: "none" });
-      return;
-    }
-    if (Number(form.departDates) < Number(todayStr)) {
-      wx.showToast({ title: "出发日期不能早于今天", icon: "none" });
-      return;
-    }
-    if (flightWayIndex === 1 && form.returnDates && Number(form.returnDates) < Number(todayStr)) {
-      wx.showToast({ title: "返程日期不能早于今天", icon: "none" });
-      return;
-    }
-
-    const autoName = generateTaskName(form, flightWayIndex);
+    const autoName = generateTaskName(form, this.data.flightWayIndex, monitorType);
     let subscribeAccepted = false;
 
     // 获取 openid（如果开启了订阅消息）
@@ -305,15 +406,39 @@ Page({
       openid = await ensureOpenid();
     }
 
-    const payload = {
-      ...form,
+    // 按监控类型分别构建 payload，避免字段互相污染
+    const commonPayload = {
       name: autoName,
-      flightWay: FLIGHT_WAYS[flightWayIndex],
-      placeFrom: form.placeFrom.toUpperCase(),
-      placeTo: form.placeTo.toUpperCase(),
+      monitorType,
+      threshold: Number(form.threshold) || (monitorType === "exchange_rate" ? 0.01 : 50),
+      checkIntervalSec: Number(form.checkIntervalSec) || (monitorType === "exchange_rate" ? 300 : 600),
       targetPrice: form.targetPrice ? Number(form.targetPrice) : null,
+      notifyOnDrop: form.notifyOnDrop,
+      pushplusToken: form.pushplusToken,
+      subscribeEnabled: form.subscribeEnabled,
+      active: form.active,
       openid
     };
+
+    let payload;
+    if (monitorType === "exchange_rate") {
+      payload = {
+        ...commonPayload,
+        baseCurrency: form.baseCurrency.toUpperCase(),
+        quoteCurrency: form.quoteCurrency.toUpperCase()
+        // 故意不包含机票字段
+      };
+    } else {
+      payload = {
+        ...commonPayload,
+        flightWay: FLIGHT_WAYS[this.data.flightWayIndex],
+        placeFrom: form.placeFrom.toUpperCase(),
+        placeTo: form.placeTo.toUpperCase(),
+        departDates: form.departDates,
+        returnDates: form.returnDates || undefined
+        // 故意不包含汇率字段
+      };
+    }
 
     this.setData({ submitting: true });
     try {

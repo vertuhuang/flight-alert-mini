@@ -3,6 +3,7 @@ const { URL } = require("url");
 const { HOST, PORT, STORE_DRIVER, WX_APPID, WX_APPSECRET } = require("./config");
 const { CloudBaseStore } = require("./lib/cloudbase-store");
 const { CtripProvider } = require("./lib/ctrip-provider");
+const { FrankfurterProvider } = require("./lib/frankfurter-provider");
 const { MonitorService } = require("./lib/monitor-service");
 const { PushPlusNotifier } = require("./lib/pushplus-notifier");
 const { WxSubscribeNotifier } = require("./lib/wx-subscribe-notifier");
@@ -11,9 +12,19 @@ const { badRequest, notFound, parseBody, sendJson } = require("./lib/utils");
 
 const store =
   STORE_DRIVER === "cloudbase" ? new CloudBaseStore() : new JsonStore();
-const provider = new CtripProvider();
 const notifier = new PushPlusNotifier();
 const wxSubscribeNotifier = new WxSubscribeNotifier();
+
+// Composite provider: routes to the appropriate provider based on task type
+const flightProvider = new CtripProvider();
+const exchangeProvider = new FrankfurterProvider();
+const provider = {
+  fetchPrices(task) {
+    const type = task.monitorType || "flight";
+    if (type === "exchange_rate") return exchangeProvider.fetchPrices(task);
+    return flightProvider.fetchPrices(task);
+  }
+};
 const monitorService = new MonitorService({ store, provider, notifier, wxSubscribeNotifier });
 
 function getTaskIdFromPath(pathname) {

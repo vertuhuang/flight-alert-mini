@@ -7,30 +7,31 @@
         <view style="display: flex; align-items: center; justify-content: space-between;">
           <view style="display: flex; align-items: center; gap: 12rpx;">
             <view style="font-size: 32rpx; font-weight: 700; color: #0f172a;">{{item.routeText}}</view>
+            <t-tag wx:if="{{item.monitorType === 'exchange_rate'}}" theme="default" variant="outline" size="small" style="flex-shrink: 0; color: #aaa;">汇率</t-tag>
+            <t-tag wx:else theme="default" variant="outline" size="small" style="flex-shrink: 0; color: #aaa;">机票</t-tag>
             <t-tag wx:if="{{!item.active && !item.isExpired}}" theme="default" variant="light" size="small" style="flex-shrink: 0;">已暂停</t-tag>
             <t-tag wx:if="{{item.isExpired}}" theme="warning" variant="light" size="small" style="flex-shrink: 0;">已过期</t-tag>
           </view>
           <view style="display: flex; align-items: center; gap: 12rpx;">
             <view wx:if="{{item.currentPrice != null}}" style="display: flex; align-items: baseline; gap: 4rpx;">
-              <text style="font-size: 24rpx; color: #888888;">当前最低价</text>
-              <text style="font-size: 32rpx; font-weight: 700; color: #0f172a;">{{item.currentPrice}}</text>
-              <text style="font-size: 24rpx; color: #888888;">元</text>
+              <text wx:if="{{item.monitorType === 'exchange_rate'}}" style="font-size: 24rpx; color: #888888;">当前汇率</text>
+              <text wx:else style="font-size: 24rpx; color: #888888;">当前最低价</text>
+              <text style="font-size: 32rpx; font-weight: 700; color: #0f172a;">{{item.priceText}}</text>
             </view>
-            <view wx:else style="font-size: 24rpx; color: #888888;">暂无价格数据</view>
+            <view wx:else style="font-size: 24rpx; color: #888888;">暂无数据</view>
           </view>
         </view>
 
         <!-- Dates + Last change -->
         <view style="margin-top: 8rpx; display: flex; align-items: center; justify-content: space-between;">
           <view style="font-size: 24rpx; color: #888888;">
-            {{item.departDatesText}}
-            <text wx:if="{{item.flightWay === 'Roundtrip'}}"> 往返</text>
-            <text wx:else> 单程</text>
+            <text wx:if="{{item.monitorType === 'exchange_rate'}}">{{item.baseCurrency}}/{{item.quoteCurrency}} 实时汇率</text>
+            <text wx:else>{{item.departDatesText}} <text wx:if="{{item.flightWay === 'Roundtrip'}}"> 往返</text><text wx:else> 单程</text></text>
           </view>
           <view wx:if="{{item.latestChangeInfo}}" style="font-size: 24rpx; display: flex; align-items: center; gap: 8rpx;">
             <text style="color: #888888;">{{item.latestChangeInfo.timeStr}}</text>
-            <text wx:if="{{item.latestChangeInfo.type === 'drop'}}" style="color: #16a34a;">↓{{item.latestChangeInfo.delta}}元</text>
-            <text wx:if="{{item.latestChangeInfo.type === 'rise'}}" style="color: #dc2626;">↑{{item.latestChangeInfo.delta}}元</text>
+            <text wx:if="{{item.latestChangeInfo.type === 'drop'}}" style="color: #16a34a;">↓{{item.deltaText}}</text>
+            <text wx:if="{{item.latestChangeInfo.type === 'rise'}}" style="color: #dc2626;">↑{{item.deltaText}}</text>
           </view>
           <view wx:else style="font-size: 24rpx; color: #888888;">尚未变价</view>
         </view>
@@ -43,15 +44,21 @@
   </block>
 
   <!-- Empty state -->
-  <view wx:else class="card">
-    <t-empty icon="flight" description="还没有监控任务" />
-    <view style="text-align: center; margin-top: 16rpx;">
-      <t-button theme="primary" size="small" icon="add" bind:tap="goCreateTask">创建第一个任务</t-button>
-    </view>
+  <view wx:else style="display: flex; align-items: center; justify-content: center; height: 60vh;">
+    <text style="font-size: 28rpx; color: #aaaaaa;">当前暂无监控任务</text>
   </view>
 
   <!-- FAB -->
   <t-fab icon="add" bind:click="goCreateTask" />
+
+  <!-- 创建类型选择 -->
+  <t-action-sheet
+    visible="{{showCreateSheet}}"
+    items="{{createTypeItems}}"
+    bind:selected="onCreateTypeSelect"
+    bind:cancel="onCreateTypeClose"
+    bind:visible-change="onCreateTypeClose"
+  />
 
   <!-- ActionSheet -->
   <t-action-sheet

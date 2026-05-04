@@ -1,7 +1,9 @@
 const {
   DEFAULT_CHECK_INTERVAL_SEC,
   DEFAULT_THRESHOLD,
-  SCHEDULER_TICK_MS
+  SCHEDULER_TICK_MS,
+  EXCHANGE_DEFAULT_CHECK_INTERVAL_SEC,
+  EXCHANGE_DEFAULT_THRESHOLD
 } = require("../config");
 const {
   buildSummaryFromSnapshot,
@@ -291,19 +293,23 @@ class MonitorService {
   }
 
   validateTaskInput(input, { partial = false } = {}) {
-    const flightWay = input.flightWay || "Oneway";
-    const departDates = normalizeDateList(input.departDates);
-    const returnDates = normalizeDateList(input.returnDates);
+    const monitorType = this.#resolveMonitorType(input);
     const threshold = Number(
-      input.threshold == null ? DEFAULT_THRESHOLD : input.threshold
+      input.threshold == null
+        ? (monitorType === "exchange_rate" ? EXCHANGE_DEFAULT_THRESHOLD : DEFAULT_THRESHOLD)
+        : input.threshold
     );
     const checkIntervalSec = Number(
       input.checkIntervalSec == null
-        ? DEFAULT_CHECK_INTERVAL_SEC
+        ? (monitorType === "exchange_rate" ? EXCHANGE_DEFAULT_CHECK_INTERVAL_SEC : DEFAULT_CHECK_INTERVAL_SEC)
         : input.checkIntervalSec
     );
     const targetPrice = input.targetPrice == null ? null : Number(input.targetPrice);
     const notifyOnDrop = input.notifyOnDrop == null ? true : Boolean(input.notifyOnDrop);
+
+    if (!["flight", "exchange_rate"].includes(monitorType)) {
+      throw new Error("monitorType 仅支持 flight 或 exchange_rate");
+    }
 
     if (!partial || input.name != null) {
       if (!String(input.name || "").trim()) {
@@ -311,31 +317,59 @@ class MonitorService {
       }
     }
 
-    if (!partial || input.placeFrom != null) {
-      if (!/^[A-Za-z]{3}$/.test(String(input.placeFrom || "").trim())) {
-        throw new Error("出发机场代码必须是 3 位 IATA 代码");
+    if (monitorType === "exchange_rate") {
+      // 汇率监控校验
+      if (!partial || input.baseCurrency != null) {
+        const base = String(input.baseCurrency || "").trim().toUpperCase();
+        if (!/^[A-Z]{3}$/.test(base)) {
+          throw new Error("基础货币代码必须是 3 位字母（如 USD）");
+        }
       }
-    }
-
-    if (!partial || input.placeTo != null) {
-      if (!/^[A-Za-z]{3}$/.test(String(input.placeTo || "").trim())) {
-        throw new Error("到达机场代码必须是 3 位 IATA 代码");
+      if (!partial || input.quoteCurrency != null) {
+        const quote = String(input.quoteCurrency || "").trim().toUpperCase();
+        if (!/^[A-Z]{3}$/.test(quote)) {
+          throw new Error("报价货币代码必须是 3 位字母（如 CNY）");
+        }
       }
-    }
-
-    if (!["Oneway", "Roundtrip"].includes(flightWay)) {
-      throw new Error("flightWay 仅支持 Oneway 或 Roundtrip");
-    }
-
-    if (!partial || input.departDates != null) {
-      if (!departDates.length || departDates.some((item) => !isValidDateCode(item))) {
-        throw new Error("departDates 必须是 YYYYMMDD 格式的非空列表");
+      if (!partial || (input.baseCurrency != null && input.quoteCurrency != null)) {
+        const base = String(input.baseCurrency || "").trim().toUpperCase();
+        const quote = String(input.quoteCurrency || "").trim().toUpperCase();
+        if (base === quote) {
+          throw new Error("基础货币和报价货币不能相同");
+        }
       }
-    }
+    } else {
+      // 机票监控校验
+      const flightWay = input.flightWay || "Oneway";
+      const departDates = normalizeDateList(input.departDates);
+      const returnDates = normalizeDateList(input.returnDates);
 
-    if (flightWay === "Roundtrip" && (!partial || input.returnDates != null)) {
-      if (!returnDates.length || returnDates.some((item) => !isValidDateCode(item))) {
-        throw new Error("往返票任务必须提供 returnDates");
+      if (!partial || input.placeFrom != null) {
+        if (!/^[A-Za-z]{3}$/.test(String(input.placeFrom || "").trim())) {
+          throw new Error("出发机场代码必须是 3 位 IATA 代码");
+        }
+      }
+
+      if (!partial || input.placeTo != null) {
+        if (!/^[A-Za-z]{3}$/.test(String(input.placeTo || "").trim())) {
+          throw new Error("到达机场代码必须是 3 位 IATA 代码");
+        }
+      }
+
+      if (!["Oneway", "Roundtrip"].includes(flightWay)) {
+        throw new Error("flightWay 仅支持 Oneway 或 Roundtrip");
+      }
+
+      if (!partial || input.departDates != null) {
+        if (!departDates.length || departDates.some((item) => !isValidDateCode(item))) {
+          throw new Error("departDates 必须是 YYYYMMDD 格式的非空列表");
+        }
+      }
+
+      if (flightWay === "Roundtrip" && (!partial || input.returnDates != null)) {
+        if (!returnDates.length || returnDates.some((item) => !isValidDateCode(item))) {
+          throw new Error("往返票任务必须提供 returnDates");
+        }
       }
     }
 
@@ -351,13 +385,9 @@ class MonitorService {
       throw new Error("目标价格必须是正数");
     }
 
-    return {
+    const result = {
       name: String(input.name || "").trim(),
-      placeFrom: String(input.placeFrom || "").trim().toUpperCase(),
-      placeTo: String(input.placeTo || "").trim().toUpperCase(),
-      flightWay,
-      departDates,
-      returnDates,
+      monitorType,
       threshold,
       checkIntervalSec,
       targetPrice,
@@ -367,6 +397,36 @@ class MonitorService {
       subscribeEnabled: input.subscribeEnabled == null ? false : Boolean(input.subscribeEnabled),
       active: input.active == null ? true : Boolean(input.active)
     };
+
+    if (monitorType === "exchange_rate") {
+      result.baseCurrency = String(input.baseCurrency || "").trim().toUpperCase();
+      result.quoteCurrency = String(input.quoteCurrency || "").trim().toUpperCase();
+    } else {
+      result.placeFrom = String(input.placeFrom || "").trim().toUpperCase();
+      result.placeTo = String(input.placeTo || "").trim().toUpperCase();
+      result.flightWay = input.flightWay || "Oneway";
+      result.departDates = normalizeDateList(input.departDates);
+      result.returnDates = normalizeDateList(input.returnDates);
+    }
+
+    return result;
+  }
+
+  #resolveMonitorType(input = {}) {
+    if (input.monitorType === "flight" || input.monitorType === "exchange_rate") {
+      return input.monitorType;
+    }
+
+    const baseCurrency = String(input.baseCurrency || "").trim();
+    const quoteCurrency = String(input.quoteCurrency || "").trim();
+    const placeFrom = String(input.placeFrom || "").trim();
+    const placeTo = String(input.placeTo || "").trim();
+
+    if ((baseCurrency || quoteCurrency) && !placeFrom && !placeTo) {
+      return "exchange_rate";
+    }
+
+    return "flight";
   }
 
   async createTask(input) {
@@ -391,6 +451,11 @@ class MonitorService {
       createdAt: now,
       updatedAt: now
     };
+
+    // 汇率任务没有日期字段，跳过日期相关清零
+    if (payload.monitorType === "exchange_rate") {
+      // 无额外初始化
+    }
 
     if (typeof this.store.writeTask === "function") {
       await this.store.writeTask(task);
@@ -447,11 +512,20 @@ class MonitorService {
 
       // 发送创建任务通知
       const notifyResults = [];
-      const fromCity = getCityByCode(task.placeFrom);
-      const toCity = getCityByCode(task.placeTo);
-      const dateText = task.departDates.map((d) => `${d.slice(4, 6)}月${d.slice(6, 8)}日`).join("、");
-      const title = `${fromCity}飞${toCity}票价监控已创建`;
-      const content = `${dateText}${fromCity}飞${toCity} 当前最低价${summary?.minPrice || "暂无"}元`;
+
+      let title, content;
+      if (task.monitorType === "exchange_rate") {
+        const pair = `${task.baseCurrency}/${task.quoteCurrency}`;
+        const rate = summary?.minPrice != null ? summary.minPrice.toFixed(4) : "暂无";
+        title = `🔔 ${pair} 汇率监控已启动`;
+        content = `监控货币对：${pair}\n当前汇率：${rate}\n变动阈值：${task.threshold}\n检查间隔：${task.checkIntervalSec}秒`;
+      } else {
+        const fromCity = getCityByCode(task.placeFrom);
+        const toCity = getCityByCode(task.placeTo);
+        const dateText = task.departDates.map((d) => `${d.slice(4, 6)}月${d.slice(6, 8)}日`).join("、");
+        title = `${fromCity}飞${toCity}票价监控已创建`;
+        content = `${dateText}${fromCity}飞${toCity} 当前最低价${summary?.minPrice || "暂无"}元`;
+      }
 
       // PushPlus 通知
       if (task.pushplusToken) {
@@ -466,9 +540,23 @@ class MonitorService {
       // 微信订阅消息通知（检查配额）
       if (task.openid && task.subscribeEnabled && task.subscribeQuota > 0 && this.wxSubscribeNotifier) {
         const { WxSubscribeNotifier } = require("./wx-subscribe-notifier");
-        const fromCity = getCityByCode(task.placeFrom);
-        const toCity = getCityByCode(task.placeTo);
-        const subscribeData = WxSubscribeNotifier.buildTaskCreatedData(task, summary, fromCity, toCity);
+        let subscribeData;
+        if (task.monitorType === "exchange_rate") {
+          const now = new Date(Date.now() + 8 * 60 * 60 * 1000);
+          const timeStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")} ${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
+          const code = `${task.baseCurrency}-${task.quoteCurrency}`;
+          const rate = summary?.minPrice != null ? String(summary.minPrice) : "0";
+          subscribeData = {
+            character_string1: { value: code },
+            amount4: { value: rate },
+            time11: { value: timeStr },
+            amount14: { value: "0" }
+          };
+        } else {
+          const fromCity = getCityByCode(task.placeFrom);
+          const toCity = getCityByCode(task.placeTo);
+          subscribeData = WxSubscribeNotifier.buildTaskCreatedData(task, summary, fromCity, toCity);
+        }
         const wxResult = await this.wxSubscribeNotifier.send({
           openid: task.openid,
           data: subscribeData,
@@ -539,13 +627,18 @@ class MonitorService {
     };
 
     // 关键字段变更时重置价格相关状态，触发重新检查
-    const needsReset = (
+    const flightNeedsReset = (
       patch.placeFrom !== undefined && patch.placeFrom !== current.placeFrom ||
       patch.placeTo !== undefined && patch.placeTo !== current.placeTo ||
       patch.flightWay !== undefined && patch.flightWay !== current.flightWay ||
       patch.departDates !== undefined && JSON.stringify(normalizeDateList(patch.departDates)) !== JSON.stringify(current.departDates) ||
       patch.returnDates !== undefined && JSON.stringify(normalizeDateList(patch.returnDates)) !== JSON.stringify(current.returnDates || [])
     );
+    const fxNeedsReset = (
+      patch.baseCurrency !== undefined && patch.baseCurrency !== current.baseCurrency ||
+      patch.quoteCurrency !== undefined && patch.quoteCurrency !== current.quoteCurrency
+    );
+    const needsReset = flightNeedsReset || fxNeedsReset;
 
     if (needsReset) {
       updated.baseline = {};
@@ -581,9 +674,13 @@ class MonitorService {
 
   /**
    * 判断任务是否已过期（所有出发日期都已过去）
+   * 汇率监控任务永不过期
    */
   #isTaskExpired(task) {
-    if (!task || !task.departDates || !task.departDates.length) {
+    if (!task) return false;
+    // 汇率监控永不过期
+    if (task.monitorType === "exchange_rate") return false;
+    if (!task.departDates || !task.departDates.length) {
       return false;
     }
     const today = new Date();
@@ -697,14 +794,27 @@ class MonitorService {
       const notifyResults = [];
       // PushPlus 通知
       if (notifyChanges.length > 0 && task.pushplusToken) {
-        const fromCity = getCityByCode(task.placeFrom);
-        const toCity = getCityByCode(task.placeTo);
-        // 取第一个变动作为代表
         const firstChange = notifyChanges[0];
         const isDrop = firstChange.type === "drop";
-        const title = `${fromCity}飞${toCity}机票${isDrop ? "降价" : "涨价"}了`;
-        const dateText = task.departDates.map((d) => `${d.slice(4, 6)}月${d.slice(6, 8)}日`).join("、");
-        const content = `${dateText} ${fromCity}飞${toCity}当前最低价${summary?.minPrice || firstChange.current}元，比上次${isDrop ? "跌" : "涨"}了${Math.abs(firstChange.delta)}元`;
+        let title, content;
+        if (task.monitorType === "exchange_rate") {
+          const pair = `${task.baseCurrency}/${task.quoteCurrency}`;
+          const trend = isDrop ? "下跌" : "上涨";
+          const trendEmoji = isDrop ? "📉" : "📈";
+          const currentRate = summary?.minPrice != null ? summary.minPrice.toFixed(4) : firstChange.current;
+          const delta = firstChange.delta.toFixed(4);
+          const deltaAbs = Math.abs(firstChange.delta).toFixed(4);
+          title = `${trendEmoji} ${pair} 汇率${trend} ${deltaAbs}`;
+          content = `${pair} 当前汇率 ${currentRate}\n较上次${isDrop ? "下跌" : "上涨"} ${deltaAbs}\n变动幅度 ${((deltaAbs / currentRate) * 100).toFixed(2)}%`;
+        } else {
+          const fromCity = getCityByCode(task.placeFrom);
+          const toCity = getCityByCode(task.placeTo);
+          const dateText = task.departDates.map((d) => `${d.slice(4, 6)}月${d.slice(6, 8)}日`).join("、");
+          const delta = firstChange.delta;
+          const deltaAbs = Math.abs(delta);
+          title = `${fromCity}到${toCity}机票（${dateText}）${isDrop ? "降价" : "涨价"} ${deltaAbs} 元`;
+          content = `${dateText} ${fromCity}飞${toCity}当前最低价${summary?.minPrice || firstChange.current}元，比上次${isDrop ? "跌" : "涨"}了${deltaAbs}元`;
+        }
         const result = await this.notifier.send({
           token: task.pushplusToken,
           title,
@@ -716,9 +826,27 @@ class MonitorService {
       // 微信订阅消息通知（检查配额）
       if (notifyChanges.length > 0 && task.openid && task.subscribeEnabled && task.subscribeQuota > 0 && this.wxSubscribeNotifier) {
         const { WxSubscribeNotifier } = require("./wx-subscribe-notifier");
-        const fromCity = getCityByCode(task.placeFrom);
-        const toCity = getCityByCode(task.placeTo);
-        const subscribeData = WxSubscribeNotifier.buildPriceChangeData(task, notifyChanges, fromCity, toCity);
+        let subscribeData;
+        if (task.monitorType === "exchange_rate") {
+          const firstChange = notifyChanges[0];
+          const changeType = firstChange.type;
+          const now = new Date(Date.now() + 8 * 60 * 60 * 1000);
+          const timeStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")} ${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
+          const code = `${task.baseCurrency}-${task.quoteCurrency}`;
+          const rate = firstChange.current != null ? String(firstChange.current) : "0";
+          const rawDelta = firstChange.delta != null ? firstChange.delta : 0;
+          const diff = changeType === "drop" ? `-${Math.abs(rawDelta).toFixed(4)}` : `${Math.abs(rawDelta).toFixed(4)}`;
+          subscribeData = {
+            character_string1: { value: code },
+            amount4: { value: rate },
+            time11: { value: timeStr },
+            amount14: { value: diff }
+          };
+        } else {
+          const fromCity = getCityByCode(task.placeFrom);
+          const toCity = getCityByCode(task.placeTo);
+          subscribeData = WxSubscribeNotifier.buildPriceChangeData(task, notifyChanges, fromCity, toCity);
+        }
         const wxResult = await this.wxSubscribeNotifier.send({
           openid: task.openid,
           data: subscribeData,

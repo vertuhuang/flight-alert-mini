@@ -148,13 +148,13 @@ class WxSubscribeNotifier {
     const to = task.placeTo || "";
     const dates = (task.departDates || []).join("-");
     let code = `${from}-${to}-${dates}`;
-    // 涨跌标记：UP=涨价 DN=降价
-    if (changeType === "rise") {
-      code += "-UP";
-    } else if (changeType === "drop") {
-      code += "-DN";
-    }
     return code.slice(0, 32);
+  }
+
+  static #buildFxCode(task) {
+    const base = task.baseCurrency || "";
+    const quote = task.quoteCurrency || "";
+    return `${base}-${quote}`;
   }
 
   static buildPriceChangeData(task, changes, fromCity, toCity) {
@@ -168,8 +168,9 @@ class WxSubscribeNotifier {
     const now = new Date(Date.now() + 8 * 60 * 60 * 1000);
     const timeStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")} ${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
 
-    // 商品差价（纯数字，涨跌信息已在编号字段体现）
-    const diff = changes.length > 0 ? `${Math.abs(changes[0].delta)}` : "0";
+    // 商品差价：降价显示负数（如 -190），涨价显示正数（如 190）
+    const rawDelta = changes.length > 0 ? changes[0].delta : 0;
+    const diff = changeType === "drop" ? `-${Math.abs(rawDelta)}` : `${Math.abs(rawDelta)}`;
 
     return {
       character_string1: { value: code },

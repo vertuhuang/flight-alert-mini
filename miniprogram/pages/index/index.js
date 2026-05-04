@@ -1,6 +1,7 @@
 const { request } = require("../../utils/request");
 const { formatDateTime, formatMonthDayTime, joinDates } = require("../../utils/format");
 const { getCityByCode } = require("../../utils/airports");
+const { getCurrencyName } = require("../../utils/currencies");
 
 Page({
   data: {
@@ -8,6 +9,11 @@ Page({
     tasks: [],
     healthText: "",
     showActionSheet: false,
+    showCreateSheet: false,
+    createTypeItems: [
+      { label: "机票价格监控" },
+      { label: "汇率监控" }
+    ],
     showDeleteDialog: false,
     selectedTaskId: "",
     selectedTask: null,
@@ -36,9 +42,9 @@ Page({
       const todayStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
 
       const tasks = (tasksRes.items || []).map((task) => {
-        // 判断是否过期：最大出发日期 < 今天
+        // 判断是否过期
         let isExpired = false;
-        if (task.departDates && task.departDates.length) {
+        if (task.monitorType !== "exchange_rate" && task.departDates && task.departDates.length) {
           const maxDepartDate = Math.max(...task.departDates.map(d => Number(d)));
           isExpired = maxDepartDate < Number(todayStr);
         }
@@ -51,16 +57,32 @@ Page({
             delta: Math.abs(task.latestChange.delta)
           };
         }
-        // 获取当前价格：优先从 latestSummary，其次从历史记录
+        // 获取当前价格/汇率
         let currentPrice = task.latestSummary?.minPrice;
         if (currentPrice == null && task.latestChange?.currentPrice != null) {
           currentPrice = task.latestChange.currentPrice;
+        }
+        // 预格式化显示文本（WXML 不支持方法调用）
+        const priceText = currentPrice != null
+          ? (task.monitorType === "exchange_rate" ? currentPrice.toFixed(4) : String(currentPrice))
+          : null;
+        const deltaText = latestChangeInfo
+          ? (task.monitorType === "exchange_rate" ? latestChangeInfo.delta.toFixed(4) : latestChangeInfo.delta + "元")
+          : null;
+        // 构建路线/货币对文本
+        let routeText;
+        if (task.monitorType === "exchange_rate") {
+          routeText = `${getCurrencyName(task.baseCurrency)} / ${getCurrencyName(task.quoteCurrency)}`;
+        } else {
+          routeText = `${getCityByCode(task.placeFrom) || task.placeFrom} / ${getCityByCode(task.placeTo) || task.placeTo}`;
         }
         return {
           ...task,
           isExpired,
           currentPrice,
-          routeText: `${getCityByCode(task.placeFrom) || task.placeFrom} → ${getCityByCode(task.placeTo) || task.placeTo}`,
+          priceText,
+          deltaText,
+          routeText,
           departDatesText: joinDates(task.departDates),
           latestChangeInfo,
           lastCheckedText: formatDateTime(task.lastCheckedAt),
@@ -83,9 +105,21 @@ Page({
   },
 
   goCreateTask() {
+    // 弹出监控类型选择浮层
+    this.setData({ showCreateSheet: true });
+  },
+
+  onCreateTypeSelect(event) {
+    const index = event.detail.index;
+    this.setData({ showCreateSheet: false });
+    const params = index === 1 ? "?monitorType=exchange_rate" : "";
     wx.navigateTo({
-      url: "/pages/task-form/task-form"
+      url: `/pages/task-form/task-form${params}`
     });
+  },
+
+  onCreateTypeClose() {
+    this.setData({ showCreateSheet: false });
   },
 
   goEvents() {

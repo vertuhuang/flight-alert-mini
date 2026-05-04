@@ -1,7 +1,7 @@
 <view class="page">
-  <view class="card">
+  <!-- 航线信息（机票） -->
+  <view class="card" wx:if="{{monitorTypeIndex === 0}}">
     <view class="section-title">航线信息</view>
-
     <view class="form-list">
       <t-cell title="出发城市" arrow bindtap="openFromPicker" t-class="custom-cell">
         <text slot="note" style="color: {{form.placeFrom ? '#0f172a' : 'rgba(0, 0, 0, 0.4)'}};">{{form.placeFrom ? placeFromText : '请选择'}}</text>
@@ -32,14 +32,34 @@
     </view>
   </view>
 
+  <!-- 货币对信息（汇率） -->
+  <view class="card" wx:if="{{monitorTypeIndex === 1}}">
+    <view class="section-title">货币对信息</view>
+    <view class="form-list">
+      <t-cell title="基础货币" arrow bindtap="openBaseCurrencyPicker" t-class="custom-cell">
+        <text slot="note" style="color: {{form.baseCurrency ? '#0f172a' : 'rgba(0, 0, 0, 0.4)'}};">{{form.baseCurrency ? (baseCurrencyText + ' (' + form.baseCurrency + ')') : '请选择'}}</text>
+      </t-cell>
+      <t-picker title="选择基础货币" visible="{{showBaseCurrencyPicker}}" value="{{[form.baseCurrency]}}" bind:confirm="onBaseCurrencyChange">
+        <t-picker-item options="{{currencyOptions}}"></t-picker-item>
+      </t-picker>
+
+      <t-cell title="报价货币" arrow bindtap="openQuoteCurrencyPicker" t-class="custom-cell">
+        <text slot="note" style="color: {{form.quoteCurrency ? '#0f172a' : 'rgba(0, 0, 0, 0.4)'}};">{{form.quoteCurrency ? (quoteCurrencyText + ' (' + form.quoteCurrency + ')') : '请选择'}}</text>
+      </t-cell>
+      <t-picker title="选择报价货币" visible="{{showQuoteCurrencyPicker}}" value="{{[form.quoteCurrency]}}" bind:confirm="onQuoteCurrencyChange">
+        <t-picker-item options="{{currencyOptions}}"></t-picker-item>
+      </t-picker>
+    </view>
+  </view>
+
   <!-- Monitor strategy -->
   <view class="card">
     <view class="section-title">监控策略</view>
 
     <view class="form-list">
-      <t-input label="变动阈值" placeholder="价格变动多少元时通知" type="number" value="{{form.threshold}}" bind:change="onInputChange" data-field="threshold" suffix="元" t-class="custom-input" />
-      <t-input label="目标价格" placeholder="低于此价格时通知（可选）" type="number" value="{{form.targetPrice}}" bind:change="onInputChange" data-field="targetPrice" suffix="元" t-class="custom-input" />
-      <t-input label="检查间隔" placeholder="多久检查一次价格" type="number" value="{{form.checkIntervalSec}}" bind:change="onInputChange" data-field="checkIntervalSec" suffix="秒" t-class="custom-input" />
+      <t-input label="变动阈值" placeholder="{{monitorTypeIndex === 0 ? '价格变动多少元时通知' : '汇率变动多少时通知'}}" type="digit" value="{{form.threshold}}" bind:change="onInputChange" data-field="threshold" suffix="{{monitorTypeIndex === 0 ? '元' : ''}}" t-class="custom-input" />
+      <t-input label="目标{{monitorTypeIndex === 0 ? '价格' : '汇率'}}" placeholder="低于此{{monitorTypeIndex === 0 ? '价格' : '数值'}}时通知（可选）" type="digit" value="{{form.targetPrice}}" bind:change="onInputChange" data-field="targetPrice" suffix="{{monitorTypeIndex === 0 ? '元' : ''}}" t-class="custom-input" />
+      <t-input label="检查间隔" placeholder="多久检查一次" type="number" value="{{form.checkIntervalSec}}" bind:change="onInputChange" data-field="checkIntervalSec" suffix="秒" t-class="custom-input" />
       <t-cell title="仅降价时通知" bordered="{{false}}" t-class="custom-cell">
         <t-switch slot="note" value="{{form.notifyOnDrop}}" bind:change="onNotifyDropChange" />
       </t-cell>
@@ -49,14 +69,14 @@
   <!-- Notification -->
   <view class="card">
     <view class="section-title">通知方式</view>
-    <view class="section-desc">可同时开启多种通知渠道，确保不错过价格变动</view>
+    <view class="section-desc">可同时开启多种通知渠道，确保不错过{{monitorTypeIndex === 0 ? '价格' : '汇率'}}变动</view>
 
     <view class="form-list">
       <t-cell title="小程序订阅提醒" bordered="{{false}}" t-class="custom-cell">
         <t-switch slot="note" value="{{form.subscribeEnabled}}" bind:change="onSubscribeChange" />
       </t-cell>
       <view wx:if="{{form.subscribeEnabled}}" style="padding: 0 32rpx 16rpx; font-size: 22rpx; color: #999;">
-        开启后，价格变动时将通过微信服务通知提醒您（每次授权仅可发送一条提醒）
+        开启后，{{monitorTypeIndex === 0 ? '价格' : '汇率'}}变动时将通过微信服务通知提醒您（每次授权仅可发送一条提醒）
       </view>
       <view style="height: 2rpx; background: #f1f5f9; margin: 16rpx 32rpx;"></view>
       <view style="padding: 24rpx 32rpx 8rpx; font-size: 24rpx; color: #999; font-weight: 500;">PushPlus 推送（可选）</view>

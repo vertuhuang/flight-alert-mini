@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "航旅票价监控",
+  "navigationBarTitleText": "价格监控",
   "usingComponents": {
     "t-button": "tdesign-miniprogram/button/button",
     "t-tag": "tdesign-miniprogram/tag/tag",
