@@ -937,8 +937,7 @@ class MonitorService {
 
       // Filter changes for notification based on strategy
       const notifyChanges = changes.filter((change) => {
-        if (change.type === "initial") return false;
-        if (change.meetsThreshold === false) return false;
+        // initial changes are now notified
 
         // 目标价格触发：价格下降到目标价以下（无论是否开启仅降价通知）
         if (normalizedTask.targetPrice && change.type === "drop" && change.current <= normalizedTask.targetPrice) {

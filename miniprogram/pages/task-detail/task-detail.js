@@ -47,7 +47,7 @@ Page({
 
         // 查看通知后，如果任务开启了订阅消息，提示用户重新订阅
         if (task.subscribeEnabled && SUBSCRIBE_TEMPLATE_ID) {
-          this.promptResubscribe();
+          await this.promptResubscribe();
         }
       }
 
@@ -100,7 +100,6 @@ Page({
             deltaText
           };
         })
-        .filter((item) => item.changes.length > 0);
 
       let headerTitle, placeFromText, placeToText, departDatesText, returnDatesText;
       if (isFx) {
@@ -334,15 +333,9 @@ Page({
           method: "POST",
           data: { amount: 1 }
         });
-        // 更新显示的配额
-        if (result && result.subscribeQuota !== undefined) {
-          const nextQuota = result.subscribeQuota;
-          this.setData({
-            subscribeCount: nextQuota,
-            "task.subscribeQuota": nextQuota
-          });
-        }
         wx.showToast({ title: "订阅成功", icon: "success" });
+        // 重新加载详情，统一更新 subscribeCount，避免两处 setData 竞态
+        this.loadDetail();
       }
     } catch (err) {
       // 用户拒绝或不支持，不影响主流程

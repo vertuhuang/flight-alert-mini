@@ -15,7 +15,7 @@
             <view class="muted">{{item.createdAtText}}</view>
           </view>
         </view>
-        <t-tag wx:if="{{item.notified}}" theme="primary" variant="light" size="small">已推送</t-tag>
+        <t-tag wx:if="{{item.notified}}" theme="primary" variant="outline" size="small">已推送</t-tag>
       </view>
 
       <!-- Changes -->

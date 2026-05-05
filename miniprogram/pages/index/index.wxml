@@ -20,11 +20,11 @@
         <view style="display: flex; align-items: center; justify-content: space-between;">
           <view style="display: flex; align-items: center; gap: 12rpx;">
             <view style="font-size: 32rpx; font-weight: 700; color: #0f172a;">{{item.routeText}}</view>
-            <t-tag wx:if="{{item.monitorType === 'exchange_rate'}}" theme="default" variant="outline" size="small" style="flex-shrink: 0; color: #aaa;">汇率</t-tag>
-            <t-tag wx:elif="{{item.monitorType === 'gold'}}" theme="default" variant="outline" size="small" style="flex-shrink: 0; color: #aaa;">金价</t-tag>
-            <t-tag wx:else theme="default" variant="outline" size="small" style="flex-shrink: 0; color: #aaa;">机票</t-tag>
-            <t-tag wx:if="{{!item.active && !item.isExpired}}" theme="default" variant="light" size="small" style="flex-shrink: 0;">已暂停</t-tag>
-            <t-tag wx:if="{{item.isExpired}}" theme="warning" variant="light" size="small" style="flex-shrink: 0;">已过期</t-tag>
+            <t-tag wx:if="{{item.monitorType === 'exchange_rate'}}" theme="default" variant="outline" size="small" style="flex-shrink: 0; color: #aaa; padding: 1px 4rpx; font-size: 20rpx; line-height: 1.2;">汇率</t-tag>
+            <t-tag wx:elif="{{item.monitorType === 'gold'}}" theme="default" variant="outline" size="small" style="flex-shrink: 0; color: #aaa; padding: 1px 4rpx; font-size: 20rpx; line-height: 1.2;">金价</t-tag>
+            <t-tag wx:else theme="default" variant="outline" size="small" style="flex-shrink: 0; color: #aaa; padding: 1px 4rpx; font-size: 20rpx; line-height: 1.2;">机票</t-tag>
+            <t-tag wx:if="{{!item.active && !item.isExpired}}" theme="default" variant="outline" size="small" style="flex-shrink: 0;">已暂停</t-tag>
+            <t-tag wx:if="{{item.isExpired}}" theme="warning" variant="outline" size="small" style="flex-shrink: 0;">已过期</t-tag>
           </view>
           <view style="display: flex; align-items: center; gap: 12rpx;">
             <view wx:if="{{item.currentPrice != null}}" style="display: flex; align-items: baseline; gap: 4rpx;">
