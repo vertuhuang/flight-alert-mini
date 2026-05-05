@@ -960,6 +960,12 @@ class MonitorService {
   }
 
   #buildBaseline(snapshot) {
+    // 汇率任务：用固定 key（base_quote），不依赖日期
+    if (snapshot.monitorType === "exchange_rate") {
+      const key = `${snapshot.base}_${snapshot.quote}`;
+      return { [key]: snapshot.rate };
+    }
+
     if (snapshot.flightWay === "Roundtrip") {
       const matrixBaseline = {};
       for (const [departDate, returnMap] of Object.entries(snapshot.prices || {})) {
@@ -982,6 +988,49 @@ class MonitorService {
     const seenKeys = this.#buildSeenPriceKeySet(task, histories);
     
     const changes = [];
+
+    // 汇率任务：用固定 key（base_quote）比较，避免日期变化导致永远是 initial
+    if (snapshot.monitorType === "exchange_rate") {
+      const key = `${snapshot.base}_${snapshot.quote}`;
+      const current = snapshot.rate;
+      let previous = baseline[key];
+
+      // 兼容旧数据：baseline 里可能存的是日期 key，尝试取其中任一值作为 previous
+      if (previous == null) {
+        const oldValues = Object.values(baseline).filter(v => typeof v === "number");
+        if (oldValues.length > 0) {
+          previous = oldValues[oldValues.length - 1];
+        }
+      }
+
+      if (previous == null && !seenKeys.has(key)) {
+        changes.push({
+          type: "initial",
+          key,
+          label: `${snapshot.base}/${snapshot.quote}`,
+          previous: null,
+          current,
+          delta: null
+        });
+        return changes;
+      }
+
+      if (previous != null) {
+        const delta = current - previous;
+        if (Math.abs(delta) >= task.threshold) {
+          changes.push({
+            type: delta > 0 ? "rise" : "drop",
+            key,
+            label: `${snapshot.base}/${snapshot.quote}`,
+            previous,
+            current,
+            delta
+          });
+        }
+      }
+
+      return changes;
+    }
 
     if (snapshot.flightWay === "Roundtrip") {
       for (const [departDate, returnMap] of Object.entries(snapshot.prices || {})) {
@@ -1066,6 +1115,12 @@ class MonitorService {
 
   #extractSnapshotKeys(snapshot) {
     const keys = [];
+
+    // 汇率任务：用固定 key
+    if (snapshot.monitorType === "exchange_rate") {
+      keys.push(`${snapshot.base}_${snapshot.quote}`);
+      return keys;
+    }
 
     if (snapshot.flightWay === "Roundtrip") {
       for (const [departDate, returnMap] of Object.entries(snapshot.prices || {})) {
