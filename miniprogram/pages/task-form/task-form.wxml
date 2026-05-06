@@ -60,15 +60,12 @@
       <t-input label="变动阈值" placeholder="{{monitorTypeIndex === 0 ? '价格变动多少元时通知' : '汇率变动多少时通知'}}" type="digit" value="{{form.threshold}}" bind:change="onInputChange" data-field="threshold" suffix="{{monitorTypeIndex === 0 ? '元' : ''}}" t-class="custom-input" />
       <t-input label="目标{{monitorTypeIndex === 0 ? '价格' : '汇率'}}" placeholder="低于此{{monitorTypeIndex === 0 ? '价格' : '数值'}}时通知（可选）" type="digit" value="{{form.targetPrice}}" bind:change="onInputChange" data-field="targetPrice" suffix="{{monitorTypeIndex === 0 ? '元' : ''}}" t-class="custom-input" />
       <t-input label="检查间隔" placeholder="多久检查一次" type="number" value="{{form.checkIntervalSec}}" bind:change="onInputChange" data-field="checkIntervalSec" suffix="秒" t-class="custom-input" />
-      <t-cell title="仅降价时通知" bordered="{{false}}" t-class="custom-cell">
+      <t-cell title="仅降价时通知" bordered="{{true}}" t-class="custom-cell">
         <t-switch slot="note" value="{{form.notifyOnDrop}}" bind:change="onNotifyDropChange" />
       </t-cell>
-      <t-cell title="遵循静默时段" bordered="{{false}}" t-class="custom-cell">
+      <t-cell title="自动休眠（{{userSilentRangeText}}）" bordered="{{false}}" t-class="custom-cell">
         <t-switch slot="note" value="{{form.silentHoursEnabled}}" bind:change="onSilentHoursEnabledChange" />
       </t-cell>
-      <view wx:if="{{form.silentHoursEnabled}}" style="padding: 0 32rpx 16rpx; font-size: 22rpx; color: #999;">
-        开启后，将在 {{userSilentRangeText}} 内自动暂停该任务的检查与推送
-      </view>
     </view>
   </view>
 

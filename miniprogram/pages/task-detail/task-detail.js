@@ -138,7 +138,8 @@ Page({
           ];
 
       // 预格式化当前价格/汇率的显示文本
-      const currentMinPrice = task.latestSummary?.minPrice;
+      // 优先用 latestSummary，如果没有则从 latestChange 兜底（防止空查询覆盖数据）
+      const currentMinPrice = task.latestSummary?.minPrice ?? task.latestChange?.currentPrice;
       const currentPriceText = currentMinPrice != null
         ? (isFx ? currentMinPrice.toFixed(4) : String(currentMinPrice))
         : null;

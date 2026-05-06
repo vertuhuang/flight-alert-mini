@@ -680,6 +680,11 @@ class MonitorService {
       updatedAt: isoNow()
     };
 
+    // 允许直接设置 subscribeQuota (validateTaskInput 不处理此字段)
+    if (patch.subscribeQuota !== undefined) {
+      updated.subscribeQuota = Math.max(0, Number(patch.subscribeQuota));
+    }
+
     // 关键字段变更时重置价格相关状态，触发重新检查
     const flightNeedsReset = (
       patch.placeFrom !== undefined && patch.placeFrom !== current.placeFrom ||
@@ -936,6 +941,10 @@ class MonitorService {
         // 发送成功后在当前 task 快照上直接核销，避免后续 writeTask 用旧值覆盖。
         if (wxResult && wxResult.errcode === 0) {
           updatedTask.subscribeQuota = Math.max(0, Number(updatedTask.subscribeQuota || 0) - 1);
+        } else if (wxResult && wxResult.errcode === 43101) {
+          // 用户已取消订阅或授权过期 — 清零僵尸配额，避免重复尝试
+          updatedTask.subscribeQuota = 0;
+          console.warn(`User ${normalizedTask.openid} subscription expired for task ${id}, quota reset to 0`);
         }
         notifyResults.push({
           channel: "wxsubscribe",

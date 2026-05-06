@@ -12,8 +12,8 @@ const {
 } = require("../../utils/user-settings");
 
 const SETTINGS_ITEMS = [
-  { label: "PushPlus Token 设置" },
-  { label: "静默时段设置" }
+  { label: "推送渠道设置" },
+  { label: "自动休眠设置" }
 ];
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => ({
@@ -36,6 +36,8 @@ Page({
     loading: false,
     tasks: [],
     healthText: "",
+    statusBarHeight: 20,
+    navbarHeight: 64,
     showActionSheet: false,
     showCreateSheet: false,
     showSettingsSheet: false,
@@ -61,6 +63,20 @@ Page({
     timePickerTitle: "选择开始时间",
     timePickerValue: splitTimeValue(DEFAULT_SILENT_START, DEFAULT_SILENT_START),
     timePickerOptions: [HOUR_OPTIONS, MINUTE_OPTIONS]
+  },
+
+  onLoad() {
+    try {
+      const systemInfo = wx.getSystemInfoSync();
+      const statusBarHeight = systemInfo.statusBarHeight || 20;
+      const navbarHeight = statusBarHeight + 44;
+      this.setData({
+        statusBarHeight,
+        navbarHeight
+      });
+    } catch (error) {
+      console.warn("获取系统信息失败:", error);
+    }
   },
 
   onShow() {

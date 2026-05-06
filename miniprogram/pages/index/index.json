@@ -1,11 +1,12 @@
 {
-  "navigationBarTitleText": "价格监控",
+  "navigationStyle": "custom",
   "usingComponents": {
     "t-button": "tdesign-miniprogram/button/button",
     "t-tag": "tdesign-miniprogram/tag/tag",
     "t-badge": "tdesign-miniprogram/badge/badge",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-fab": "tdesign-miniprogram/fab/fab",
+    "t-icon": "tdesign-miniprogram/icon/icon",
     "t-action-sheet": "tdesign-miniprogram/action-sheet/action-sheet",
     "t-dialog": "tdesign-miniprogram/dialog/dialog",
     "t-popup": "tdesign-miniprogram/popup/popup",

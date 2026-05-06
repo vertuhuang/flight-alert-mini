@@ -6,6 +6,13 @@ const {
   USERS_COLLECTION
 } = require("../config");
 
+const ALL_COLLECTIONS = [
+  TASKS_COLLECTION,
+  USERS_COLLECTION,
+  HISTORIES_COLLECTION,
+  EVENTS_COLLECTION
+];
+
 function stripDocumentMeta(item) {
   if (!item || typeof item !== "object") {
     return item;
@@ -65,10 +72,37 @@ class CloudBaseStore {
 
       this.app = cloudbase.init(initOptions);
       this.db = this.app.database();
+
+      // 自动创建缺失的集合（新环境部署后不会自动建表）
+      await this.#ensureCollections();
+
       this.initialized = true;
     } catch (error) {
       console.error("CloudBaseStore init failed:", error.message);
       throw error;
+    }
+  }
+
+  async #ensureCollections() {
+    for (const name of ALL_COLLECTIONS) {
+      try {
+        await this.db.createCollection(name);
+        console.log(`Created collection: ${name}`);
+      } catch (error) {
+        // 集合已存在或权限不足 — 静默跳过
+        if (
+          error.message &&
+          (
+            error.message.includes("already exists") ||
+            error.message.includes("CollectionExist") ||
+            error.message.includes("重复")
+          )
+        ) {
+          console.log(`Collection already exists: ${name}`);
+        } else {
+          console.warn(`Failed to create collection ${name}: ${error.message} (non-fatal)`);
+        }
+      }
     }
   }
 

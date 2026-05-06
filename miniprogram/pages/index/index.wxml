@@ -1,11 +1,19 @@
-<view class="page">
-  <view class="toolbar">
-    <view class="toolbar-action" bindtap="openSettings">
-      <text class="toolbar-action-text">设置</text>
+<view class="page" style="padding-top:{{navbarHeight}}px;box-sizing:border-box;">
+  <!-- 自定义导航栏 -->
+  <view class="navbar" style="padding-top:{{statusBarHeight}}px">
+    <view class="navbar-content">
+      <view class="navbar-left" bindtap="openSettings">
+        <t-icon name="setting" size="22px" color="#666666" />
+      </view>
+      <view class="navbar-title">价格监控</view>
+      <view class="navbar-right" bindtap="goEvents">
+        <t-icon name="notification" size="22px" color="#666666" />
+      </view>
     </view>
-    <text class="toolbar-status">{{healthText}}</text>
   </view>
 
+  <!-- 内容区域 -->
+  <view class="content-area">
   <!-- Task list -->
   <block wx:if="{{tasks.length}}">
     <block wx:for="{{tasks}}" wx:key="id">
@@ -54,6 +62,7 @@
   <view wx:else style="display: flex; align-items: center; justify-content: center; height: 60vh;">
     <text style="font-size: 28rpx; color: #aaaaaa;">当前暂无监控任务</text>
   </view>
+  </view>
 
   <!-- FAB -->
   <t-fab icon="add" bind:click="goCreateTask" />
@@ -86,34 +95,43 @@
 
   <t-popup visible="{{showPushplusPopup}}" placement="bottom" bind:visible-change="closePushplusPopup">
     <view class="settings-popup">
-      <view class="settings-popup-title">PushPlus Token 设置</view>
-      <view class="settings-popup-desc">只需保存一次，后续创建任务时可直接开启 PushPlus 推送。</view>
+      <view class="settings-popup-title">推送渠道设置</view>
+      <view class="settings-popup-desc">请前往 PushPlus 官网获取推送 Token 填入下方，关注 PushPlus 服务号即可获取实时推送。</view>
       <t-input
-        label="PushPlus Token"
         placeholder="请输入 PushPlus Token"
         value="{{pushplusTokenInput}}"
         bind:change="onPushplusInputChange"
+        align="center"
+        style="margin: 0 32rpx;"
       />
-      <view class="settings-popup-actions">
-        <t-button theme="default" variant="outline" bind:tap="closePushplusPopup">取消</t-button>
-        <t-button theme="primary" loading="{{savingUserSettings}}" bind:tap="savePushplusToken">保存</t-button>
+      <view class="settings-popup-actions" style="margin: 32rpx 32rpx 0;">
+        <view class="settings-popup-btn">
+          <t-button theme="default" variant="outline" block bind:tap="closePushplusPopup">取消</t-button>
+        </view>
+        <view class="settings-popup-btn">
+          <t-button theme="primary" block loading="{{savingUserSettings}}" bind:tap="savePushplusToken">保存</t-button>
+        </view>
       </view>
     </view>
   </t-popup>
 
   <t-popup visible="{{showSilentPopup}}" placement="bottom" bind:visible-change="closeSilentPopup">
     <view class="settings-popup">
-      <view class="settings-popup-title">静默时段设置</view>
-      <view class="settings-popup-desc">默认在该时段内暂停所有开启“遵循静默时段”的任务。</view>
+      <view class="settings-popup-title">自动休眠设置</view>
+      <view class="settings-popup-desc">监控任务如果开启自动休眠，将会在该休眠时段自动暂停查询和推送</view>
       <t-cell title="开始时间" arrow bindtap="openSilentPicker" data-field="start">
         <text slot="note">{{silentDraftStart}}</text>
       </t-cell>
       <t-cell title="结束时间" arrow bindtap="openSilentPicker" data-field="end">
         <text slot="note">{{silentDraftEnd}}</text>
       </t-cell>
-      <view class="settings-popup-actions">
-        <t-button theme="default" variant="outline" bind:tap="closeSilentPopup">取消</t-button>
-        <t-button theme="primary" loading="{{savingUserSettings}}" bind:tap="saveSilentSettings">保存</t-button>
+      <view class="settings-popup-actions" style="margin: 32rpx 32rpx 0;">
+        <view class="settings-popup-btn">
+          <t-button theme="default" variant="outline" block bind:tap="closeSilentPopup">取消</t-button>
+        </view>
+        <view class="settings-popup-btn">
+          <t-button theme="primary" block loading="{{savingUserSettings}}" bind:tap="saveSilentSettings">保存</t-button>
+        </view>
       </view>
     </view>
   </t-popup>
