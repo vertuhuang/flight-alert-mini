@@ -63,6 +63,12 @@
       <t-cell title="仅降价时通知" bordered="{{false}}" t-class="custom-cell">
         <t-switch slot="note" value="{{form.notifyOnDrop}}" bind:change="onNotifyDropChange" />
       </t-cell>
+      <t-cell title="遵循静默时段" bordered="{{false}}" t-class="custom-cell">
+        <t-switch slot="note" value="{{form.silentHoursEnabled}}" bind:change="onSilentHoursEnabledChange" />
+      </t-cell>
+      <view wx:if="{{form.silentHoursEnabled}}" style="padding: 0 32rpx 16rpx; font-size: 22rpx; color: #999;">
+        开启后，将在 {{userSilentRangeText}} 内自动暂停该任务的检查与推送
+      </view>
     </view>
   </view>
 
@@ -79,8 +85,13 @@
         开启后，{{monitorTypeIndex === 0 ? '价格' : '汇率'}}变动时将通过微信服务通知提醒您（每次授权仅可发送一条提醒）
       </view>
       <view style="height: 2rpx; background: #f1f5f9; margin: 16rpx 32rpx;"></view>
-      <view style="padding: 24rpx 32rpx 8rpx; font-size: 24rpx; color: #999; font-weight: 500;">PushPlus 推送（可选）</view>
-      <t-textarea placeholder="请前往 PushPlus 官网获取 Token 并填入" value="{{form.pushplusToken}}" bind:change="onInputChange" data-field="pushplusToken" maxlength="{{200}}" autosize t-class="custom-textarea" />
+      <t-cell title="PushPlus 推送" bordered="{{false}}" t-class="custom-cell">
+        <t-switch slot="note" value="{{form.pushplusEnabled}}" bind:change="onPushplusEnabledChange" />
+      </t-cell>
+      <view wx:if="{{form.pushplusEnabled}}" style="padding: 0 32rpx 16rpx; font-size: 22rpx; color: #999;">
+        <text wx:if="{{userSettings && userSettings.pushplusToken}}">已保存 PushPlus Token，变动时会自动发送推送</text>
+        <text wx:else>首次开启需要先保存一次 PushPlus Token</text>
+      </view>
       <t-cell title="创建后立即启用" bordered="{{false}}" t-class="custom-cell">
         <t-switch slot="note" value="{{form.active}}" bind:change="onActiveChange" />
       </t-cell>
@@ -93,4 +104,16 @@
       {{isEdit ? '更新任务' : '创建任务'}}
     </t-button>
   </view>
+
+  <t-popup visible="{{showPushplusPopup}}" placement="bottom" bind:visible-change="closePushplusPopup">
+    <view style="padding: 40rpx 32rpx 48rpx; background: #fff; border-top-left-radius: 32rpx; border-top-right-radius: 32rpx;">
+      <view style="font-size: 34rpx; font-weight: 700; color: #0f172a;">保存 PushPlus Token</view>
+      <view style="margin: 12rpx 0 24rpx; font-size: 24rpx; line-height: 1.6; color: #64748b;">首次开启 PushPlus 推送时需要保存一次 Token，后续所有任务都可直接复用。</view>
+      <t-input label="PushPlus Token" placeholder="请输入 PushPlus Token" value="{{pushplusTokenInput}}" bind:change="onPushplusTokenInputChange" />
+      <view style="display: flex; justify-content: flex-end; gap: 16rpx; margin-top: 32rpx;">
+        <t-button theme="default" variant="outline" bind:tap="closePushplusPopup">取消</t-button>
+        <t-button theme="primary" loading="{{savingPushplusToken}}" bind:tap="savePushplusToken">保存</t-button>
+      </view>
+    </view>
+  </t-popup>
 </view>

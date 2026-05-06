@@ -4,6 +4,7 @@ const { DATA_FILE } = require("../config");
 
 const EMPTY_DB = {
   tasks: [],
+  users: [],
   histories: {},
   events: []
 };
@@ -29,6 +30,7 @@ class JsonStore {
     const data = JSON.parse(content || "{}");
     return {
       tasks: data.tasks || [],
+      users: data.users || [],
       histories: data.histories || {},
       events: data.events || []
     };
@@ -43,6 +45,38 @@ class JsonStore {
     const next = await mutator(current);
     await this.write(next);
     return next;
+  }
+
+  async getUserByOpenid(openid) {
+    const db = await this.read();
+    return (db.users || []).find((item) => item.openid === openid) || null;
+  }
+
+  async getUsersByOpenids(openids) {
+    const ids = new Set((openids || []).filter(Boolean));
+    if (!ids.size) {
+      return {};
+    }
+
+    const db = await this.read();
+    const result = {};
+    for (const item of db.users || []) {
+      if (ids.has(item.openid)) {
+        result[item.openid] = item;
+      }
+    }
+    return result;
+  }
+
+  async writeUser(user) {
+    await this.update((db) => ({
+      ...db,
+      users: [
+        user,
+        ...(db.users || []).filter((item) => item.openid !== user.openid)
+      ]
+    }));
+    return user;
   }
 }
 

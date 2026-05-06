@@ -66,14 +66,14 @@
         <text class="detail-label">通知渠道</text>
         <text class="detail-value">
           <text wx:if="{{task.subscribeEnabled}}">订阅提醒</text>
-          <text wx:if="{{task.subscribeEnabled && task.pushplusToken}}"> + </text>
-          <text wx:if="{{task.pushplusToken}}">PushPlus</text>
-          <text wx:if="{{!task.subscribeEnabled && !task.pushplusToken}}">未配置</text>
+          <text wx:if="{{task.subscribeEnabled && task.pushplusEnabled}}"> + </text>
+          <text wx:if="{{task.pushplusEnabled}}">PushPlus</text>
+          <text wx:if="{{!task.subscribeEnabled && !task.pushplusEnabled}}">未配置</text>
         </text>
       </view>
       <view wx:if="{{task.subscribeEnabled}}" class="detail-row subscribe-row" bindtap="onResubscribe">
         <text class="detail-label">订阅消息授权</text>
-        <text class="subscribe-action">立即获取（+{{subscribeCount}}）</text>
+        <text class="subscribe-action">获取授权（剩{{subscribeCount}}次推送）</text>
       </view>
       <view class="detail-row">
         <text class="detail-label">检查间隔</text>

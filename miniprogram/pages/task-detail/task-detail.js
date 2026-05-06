@@ -9,6 +9,7 @@ Page({
     id: "",
     loading: false,
     checking: false,
+    resubscribing: false,
     task: null,
     history: [],
     isFx: false,
@@ -146,6 +147,7 @@ Page({
         isFx,
         task: {
           ...task,
+          pushplusEnabled: task.pushplusEnabled == null ? !!task.pushplusToken : task.pushplusEnabled,
           isExpired,
           placeFromText,
           placeToText,
@@ -297,6 +299,11 @@ Page({
    * 订阅消息为一次性消费，发送一条后需要用户重新授权
    */
   async promptResubscribe() {
+    if (this.data.resubscribing) {
+      return;
+    }
+
+    this.setData({ resubscribing: true });
     try {
       const res = await requestSubscribe();
       // 检查是否有模板授权成功
@@ -310,13 +317,19 @@ Page({
         });
         // 更新显示的配额
         if (result && result.subscribeQuota !== undefined) {
-          this.setData({ subscribeCount: result.subscribeQuota });
+          const nextQuota = result.subscribeQuota;
+          this.setData({
+            subscribeCount: nextQuota,
+            "task.subscribeQuota": nextQuota
+          });
         }
         wx.showToast({ title: "订阅成功", icon: "success" });
       }
     } catch (err) {
       // 用户拒绝或不支持，不影响主流程
       console.log("重新订阅提示:", err);
+    } finally {
+      this.setData({ resubscribing: false });
     }
   },
 

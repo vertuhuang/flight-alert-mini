@@ -2,6 +2,34 @@ const { request } = require("../../utils/request");
 const { formatDateTime, formatMonthDayTime, joinDates } = require("../../utils/format");
 const { getCityByCode } = require("../../utils/airports");
 const { getCurrencyName } = require("../../utils/currencies");
+const {
+  DEFAULT_SILENT_END,
+  DEFAULT_SILENT_START,
+  formatSilentRange,
+  getUserSettings,
+  normalizeTimeText,
+  saveUserSettings
+} = require("../../utils/user-settings");
+
+const SETTINGS_ITEMS = [
+  { label: "PushPlus Token 设置" },
+  { label: "静默时段设置" }
+];
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => ({
+  label: String(index).padStart(2, "0"),
+  value: String(index).padStart(2, "0")
+}));
+
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => ({
+  label: String(index).padStart(2, "0"),
+  value: String(index).padStart(2, "0")
+}));
+
+function splitTimeValue(value, fallback) {
+  const normalized = normalizeTimeText(value, fallback);
+  return normalized.split(":");
+}
 
 Page({
   data: {
@@ -10,14 +38,29 @@ Page({
     healthText: "",
     showActionSheet: false,
     showCreateSheet: false,
+    showSettingsSheet: false,
+    showDeleteDialog: false,
+    showPushplusPopup: false,
+    showSilentPopup: false,
+    showTimePicker: false,
     createTypeItems: [
       { label: "机票价格监控" },
       { label: "汇率监控" }
     ],
-    showDeleteDialog: false,
+    settingsItems: SETTINGS_ITEMS,
     selectedTaskId: "",
     selectedTask: null,
-    actionItems: []
+    actionItems: [],
+    userSettings: null,
+    pushplusTokenInput: "",
+    savingUserSettings: false,
+    silentRangeText: `${DEFAULT_SILENT_START} - ${DEFAULT_SILENT_END}`,
+    silentDraftStart: DEFAULT_SILENT_START,
+    silentDraftEnd: DEFAULT_SILENT_END,
+    editingSilentField: "start",
+    timePickerTitle: "选择开始时间",
+    timePickerValue: splitTimeValue(DEFAULT_SILENT_START, DEFAULT_SILENT_START),
+    timePickerOptions: [HOUR_OPTIONS, MINUTE_OPTIONS]
   },
 
   onShow() {
@@ -32,50 +75,46 @@ Page({
     this.setData({ loading: true });
 
     try {
-      const [health, tasksRes] = await Promise.all([
+      const [health, tasksRes, userSettings] = await Promise.all([
         request({ url: "/health" }),
-        request({ url: "/tasks" })
+        request({ url: "/tasks" }),
+        getUserSettings().catch(() => null)
       ]);
 
-      // 计算今天日期字符串 YYYYMMDD
       const now = new Date();
-      const todayStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+      const todayStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
 
       const tasks = (tasksRes.items || []).map((task) => {
-        // 判断是否过期
         let isExpired = false;
         if (task.monitorType !== "exchange_rate" && task.departDates && task.departDates.length) {
-          const maxDepartDate = Math.max(...task.departDates.map(d => Number(d)));
+          const maxDepartDate = Math.max(...task.departDates.map((d) => Number(d)));
           isExpired = maxDepartDate < Number(todayStr);
         }
-        // 构建最新变价信息
+
         let latestChangeInfo = null;
         if (task.latestChange) {
           latestChangeInfo = {
             timeStr: formatMonthDayTime(task.latestChange.checkedAt),
-            type: task.latestChange.type, // "drop" 或 "rise"
+            type: task.latestChange.type,
             delta: Math.abs(task.latestChange.delta)
           };
         }
-        // 获取当前价格/汇率
+
         let currentPrice = task.latestSummary?.minPrice;
         if (currentPrice == null && task.latestChange?.currentPrice != null) {
           currentPrice = task.latestChange.currentPrice;
         }
-        // 预格式化显示文本（WXML 不支持方法调用）
+
         const priceText = currentPrice != null
           ? (task.monitorType === "exchange_rate" ? currentPrice.toFixed(4) : String(currentPrice))
           : null;
         const deltaText = latestChangeInfo
-          ? (task.monitorType === "exchange_rate" ? latestChangeInfo.delta.toFixed(4) : latestChangeInfo.delta + "元")
+          ? (task.monitorType === "exchange_rate" ? latestChangeInfo.delta.toFixed(4) : `${latestChangeInfo.delta}元`)
           : null;
-        // 构建路线/货币对文本
-        let routeText;
-        if (task.monitorType === "exchange_rate") {
-          routeText = `${getCurrencyName(task.baseCurrency)} / ${getCurrencyName(task.quoteCurrency)}`;
-        } else {
-          routeText = `${getCityByCode(task.placeFrom) || task.placeFrom} / ${getCityByCode(task.placeTo) || task.placeTo}`;
-        }
+        const routeText = task.monitorType === "exchange_rate"
+          ? `${getCurrencyName(task.baseCurrency)} / ${getCurrencyName(task.quoteCurrency)}`
+          : `${getCityByCode(task.placeFrom) || task.placeFrom} / ${getCityByCode(task.placeTo) || task.placeTo}`;
+
         return {
           ...task,
           isExpired,
@@ -90,9 +129,20 @@ Page({
         };
       });
 
+      const nextUserSettings = userSettings || {
+        pushplusToken: "",
+        silentStart: DEFAULT_SILENT_START,
+        silentEnd: DEFAULT_SILENT_END
+      };
+
       this.setData({
         tasks,
-        healthText: `服务在线 ${formatDateTime(health.now)}`
+        healthText: `服务在线 ${formatDateTime(health.now)}`,
+        userSettings: nextUserSettings,
+        pushplusTokenInput: nextUserSettings.pushplusToken || "",
+        silentRangeText: formatSilentRange(nextUserSettings),
+        silentDraftStart: nextUserSettings.silentStart,
+        silentDraftEnd: nextUserSettings.silentEnd
       });
     } catch (error) {
       wx.showToast({
@@ -104,8 +154,130 @@ Page({
     }
   },
 
+  openSettings() {
+    this.setData({ showSettingsSheet: true });
+  },
+
+  onSettingsClose() {
+    this.setData({ showSettingsSheet: false });
+  },
+
+  onSettingsSelect(event) {
+    const index = event.detail.index;
+    this.setData({ showSettingsSheet: false });
+    if (index === 0) {
+      this.openPushplusSettings();
+      return;
+    }
+    if (index === 1) {
+      this.openSilentSettings();
+    }
+  },
+
+  openPushplusSettings() {
+    const token = this.data.userSettings?.pushplusToken || wx.getStorageSync("pushplus_token") || "";
+    this.setData({
+      showPushplusPopup: true,
+      pushplusTokenInput: token
+    });
+  },
+
+  closePushplusPopup() {
+    this.setData({ showPushplusPopup: false });
+  },
+
+  onPushplusInputChange(event) {
+    this.setData({ pushplusTokenInput: event.detail.value });
+  },
+
+  async savePushplusToken() {
+    const token = String(this.data.pushplusTokenInput || "").trim();
+    if (!token) {
+      wx.showToast({ title: "请输入 PushPlus Token", icon: "none" });
+      return;
+    }
+
+    this.setData({ savingUserSettings: true });
+    try {
+      const user = await saveUserSettings({
+        pushplusToken: token
+      });
+      wx.setStorageSync("pushplus_token", token);
+      this.setData({
+        userSettings: user,
+        showPushplusPopup: false,
+        silentRangeText: formatSilentRange(user)
+      });
+      wx.showToast({ title: "保存成功", icon: "success" });
+    } catch (error) {
+      wx.showToast({ title: error.message || "保存失败", icon: "none" });
+    } finally {
+      this.setData({ savingUserSettings: false });
+    }
+  },
+
+  openSilentSettings() {
+    const userSettings = this.data.userSettings || {
+      silentStart: DEFAULT_SILENT_START,
+      silentEnd: DEFAULT_SILENT_END
+    };
+    this.setData({
+      showSilentPopup: true,
+      silentDraftStart: userSettings.silentStart,
+      silentDraftEnd: userSettings.silentEnd
+    });
+  },
+
+  closeSilentPopup() {
+    this.setData({ showSilentPopup: false, showTimePicker: false });
+  },
+
+  openSilentPicker(event) {
+    const field = event.currentTarget.dataset.field || "start";
+    const value = field === "start" ? this.data.silentDraftStart : this.data.silentDraftEnd;
+    this.setData({
+      showTimePicker: true,
+      editingSilentField: field,
+      timePickerTitle: field === "start" ? "选择开始时间" : "选择结束时间",
+      timePickerValue: splitTimeValue(value, field === "start" ? DEFAULT_SILENT_START : DEFAULT_SILENT_END)
+    });
+  },
+
+  onSilentPickerConfirm(event) {
+    const [hour, minute] = event.detail.value;
+    const value = `${hour}:${minute}`;
+    const field = this.data.editingSilentField;
+    this.setData({
+      showTimePicker: false,
+      [field === "start" ? "silentDraftStart" : "silentDraftEnd"]: value
+    });
+  },
+
+  onSilentPickerCancel() {
+    this.setData({ showTimePicker: false });
+  },
+
+  async saveSilentSettings() {
+    this.setData({ savingUserSettings: true });
+    try {
+      const user = await saveUserSettings({
+        silentStart: this.data.silentDraftStart,
+        silentEnd: this.data.silentDraftEnd
+      });
+      this.setData({
+        userSettings: user,
+        silentRangeText: formatSilentRange(user),
+        showSilentPopup: false
+      });
+      wx.showToast({ title: "保存成功", icon: "success" });
+    } catch (error) {
+      wx.showToast({ title: error.message || "保存失败", icon: "none" });
+    } finally {
+      this.setData({ savingUserSettings: false, showTimePicker: false });
+    }
+  },
+
   goCreateTask() {
-    // 弹出监控类型选择浮层
     this.setData({ showCreateSheet: true });
   },
 
@@ -142,30 +314,24 @@ Page({
   },
 
   onLongPress(event) {
-    // 阻止事件冒泡，防止触发 bindtap
     if (event.stopPropagation) {
       event.stopPropagation();
     }
     const { id } = event.currentTarget.dataset;
-    const task = this.data.tasks.find((t) => t.id === id);
+    const task = this.data.tasks.find((item) => item.id === id);
     if (!task) return;
 
-    let actionItems;
-    if (task.isExpired) {
-      // 已过期任务：删除当前任务、删除所有过期任务
-      actionItems = [
-        { label: "删除当前任务" },
-        { label: "删除所有过期任务" }
-      ];
-    } else {
-      // 未过期任务：与详情页"更多"相同
-      actionItems = [
-        { label: "重新获取价格" },
-        { label: "编辑" },
-        { label: task.active ? "暂停" : "启用" },
-        { label: "删除任务" }
-      ];
-    }
+    const actionItems = task.isExpired
+      ? [
+          { label: "删除当前任务" },
+          { label: "删除所有过期任务" }
+        ]
+      : [
+          { label: "重新获取价格" },
+          { label: "编辑" },
+          { label: task.active ? "暂停" : "启用" },
+          { label: "删除任务" }
+        ];
 
     this.setData({
       showActionSheet: true,
@@ -180,7 +346,6 @@ Page({
   },
 
   onActionSheetVisibleChange(e) {
-    // 点击遮罩或关闭按钮时，visible 变为 false
     if (!e.detail.visible) {
       this.setData({ showActionSheet: false });
     }
@@ -198,7 +363,6 @@ Page({
     if (!task) return;
 
     if (task.isExpired) {
-      // 已过期任务：0=删除当前任务, 1=删除所有过期任务
       switch (index) {
         case 0:
           this.confirmDelete();
@@ -207,22 +371,22 @@ Page({
           this.confirmDeleteAllExpired();
           break;
       }
-    } else {
-      // 未过期任务：0=重新获取价格, 1=编辑, 2=暂停/启用, 3=删除任务
-      switch (index) {
-        case 0:
-          this.checkNow(this.data.selectedTaskId);
-          break;
-        case 1:
-          this.goEdit(this.data.selectedTaskId);
-          break;
-        case 2:
-          this.toggleActive(this.data.selectedTaskId, this.data.selectedTask);
-          break;
-        case 3:
-          this.confirmDelete();
-          break;
-      }
+      return;
+    }
+
+    switch (index) {
+      case 0:
+        this.checkNow(this.data.selectedTaskId);
+        break;
+      case 1:
+        this.goEdit(this.data.selectedTaskId);
+        break;
+      case 2:
+        this.toggleActive(this.data.selectedTaskId, this.data.selectedTask);
+        break;
+      case 3:
+        this.confirmDelete();
+        break;
     }
   },
 
@@ -246,7 +410,6 @@ Page({
   },
 
   async toggleActive(taskId, task) {
-    // 已过期任务不允许启用
     if (!task.active && task.isExpired) {
       wx.showToast({
         title: "任务已过期，无法启用",
@@ -296,7 +459,7 @@ Page({
   },
 
   confirmDeleteAllExpired() {
-    const expiredCount = this.data.tasks.filter(t => t.isExpired).length;
+    const expiredCount = this.data.tasks.filter((task) => task.isExpired).length;
     if (expiredCount === 0) {
       wx.showToast({ title: "没有过期任务", icon: "none" });
       return;
@@ -315,7 +478,7 @@ Page({
   },
 
   async deleteAllExpiredTasks() {
-    const expiredTasks = this.data.tasks.filter(t => t.isExpired);
+    const expiredTasks = this.data.tasks.filter((task) => task.isExpired);
     if (!expiredTasks.length) {
       wx.showToast({ title: "没有过期任务", icon: "none" });
       return;

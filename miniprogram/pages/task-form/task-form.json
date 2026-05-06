@@ -1,7 +1,6 @@
 {
   "usingComponents": {
     "t-input": "tdesign-miniprogram/input/input",
-    "t-textarea": "tdesign-miniprogram/textarea/textarea",
     "t-switch": "tdesign-miniprogram/switch/switch",
     "t-button": "tdesign-miniprogram/button/button",
     "t-cell": "tdesign-miniprogram/cell/cell",
@@ -9,6 +8,7 @@
     "t-picker-item": "tdesign-miniprogram/picker-item/picker-item",
     "t-date-time-picker": "tdesign-miniprogram/date-time-picker/date-time-picker",
     "t-icon": "tdesign-miniprogram/icon/icon",
+    "t-popup": "tdesign-miniprogram/popup/popup",
     "airport-picker": "/components/airport-picker/airport-picker"
   }
 }

@@ -3,7 +3,7 @@ const { URL } = require("url");
 const { HOST, PORT, STORE_DRIVER, WX_APPID, WX_APPSECRET } = require("./config");
 const { CloudBaseStore } = require("./lib/cloudbase-store");
 const { CtripProvider } = require("./lib/ctrip-provider");
-const { FrankfurterProvider } = require("./lib/frankfurter-provider");
+const { AlphaVantageProvider } = require("./lib/alpha-vantage-provider");
 const { MonitorService } = require("./lib/monitor-service");
 const { PushPlusNotifier } = require("./lib/pushplus-notifier");
 const { WxSubscribeNotifier } = require("./lib/wx-subscribe-notifier");
@@ -17,7 +17,7 @@ const wxSubscribeNotifier = new WxSubscribeNotifier();
 
 // Composite provider: routes to the appropriate provider based on task type
 const flightProvider = new CtripProvider();
-const exchangeProvider = new FrankfurterProvider();
+const exchangeProvider = new AlphaVantageProvider();
 const provider = {
   fetchPrices(task) {
     const type = task.monitorType || "flight";
@@ -88,6 +88,21 @@ const server = http.createServer(async (req, res) => {
       } catch (error) {
         return sendJson(res, 500, { message: `登录失败: ${error.message}` });
       }
+    }
+
+    if (pathname === "/api/users/me" && req.method === "GET") {
+      const openid = String(url.searchParams.get("openid") || "").trim();
+      if (!openid) {
+        return badRequest(res, "缺少 openid 参数");
+      }
+      const user = await monitorService.getUserSettings(openid);
+      return sendJson(res, 200, user);
+    }
+
+    if (pathname === "/api/users/me" && req.method === "PATCH") {
+      const body = await parseBody(req);
+      const user = await monitorService.updateUserSettings(body);
+      return sendJson(res, 200, user);
     }
 
     if (pathname === "/api/tasks" && req.method === "GET") {
@@ -287,7 +302,7 @@ const server = http.createServer(async (req, res) => {
       if (!task) {
         return notFound(res, "任务不存在");
       }
-      return sendJson(res, 200, { subscribeQuota: task.subscribeQuota });
+      return sendJson(res, 200, { subscribeQuota: task.subscribeQuota, task });
     }
 
     return notFound(res);

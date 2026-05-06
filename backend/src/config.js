@@ -10,6 +10,7 @@ module.exports = {
   STORE_DRIVER: process.env.STORE_DRIVER || "file",
   CLOUDBASE_ENV_ID: process.env.CLOUDBASE_ENV_ID || "cloud1-d3gu5h3dk5e16d52b",
   TASKS_COLLECTION: process.env.TASKS_COLLECTION || "flight_alert_tasks",
+  USERS_COLLECTION: process.env.USERS_COLLECTION || "flight_alert_users",
   HISTORIES_COLLECTION:
     process.env.HISTORIES_COLLECTION || "flight_alert_histories",
   EVENTS_COLLECTION: process.env.EVENTS_COLLECTION || "flight_alert_events",
@@ -21,6 +22,10 @@ module.exports = {
     "https://apis.juhe.cn/flight/query",
   JUHE_FLIGHT_API_KEY:
     process.env.JUHE_FLIGHT_API_KEY || "",
+  ALPHA_VANTAGE_API_URL:
+    process.env.ALPHA_VANTAGE_API_URL || "https://www.alphavantage.co/query",
+  ALPHA_VANTAGE_API_KEY:
+    process.env.ALPHA_VANTAGE_API_KEY || "",
   PUSHPLUS_URL: "https://www.pushplus.plus/send",
   // WeChat subscribe message config
   WX_APPID: process.env.WX_APPID || "",

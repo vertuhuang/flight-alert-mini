@@ -3,6 +3,13 @@ const { getCityByCode, AIRPORTS } = require("../../utils/airports");
 const { formatDateShort, formatDateLong } = require("../../utils/format");
 const { requestSubscribe, ensureOpenid, markSubscribed, SUBSCRIBE_TEMPLATE_ID } = require("../../utils/subscribe");
 const { CURRENCIES } = require("../../utils/currencies");
+const {
+  DEFAULT_SILENT_END,
+  DEFAULT_SILENT_START,
+  formatSilentRange,
+  getUserSettings,
+  saveUserSettings
+} = require("../../utils/user-settings");
 
 const FLIGHT_WAYS = ["Oneway", "Roundtrip"];
 const FLIGHT_WAY_LABELS = ["单程", "往返"];
@@ -56,6 +63,8 @@ Page({
     todayStr: "",
     // 今天 00:00:00 的时间戳（毫秒），用于限制日期选择器最小可选日期
     todayTimestamp: 0,
+    userSettings: null,
+    userSilentRangeText: `${DEFAULT_SILENT_START} - ${DEFAULT_SILENT_END}`,
     form: {
       placeFrom: "",
       placeTo: "",
@@ -67,8 +76,9 @@ Page({
       targetPrice: "",
       notifyOnDrop: true,
       checkIntervalSec: "600",
-      pushplusToken: "",
+      pushplusEnabled: false,
       subscribeEnabled: !!SUBSCRIBE_TEMPLATE_ID,
+      silentHoursEnabled: true,
       active: true
     },
     placeFromText: "",
@@ -86,10 +96,15 @@ Page({
     showReturnDatePicker: false,
     showBaseCurrencyPicker: false,
     showQuoteCurrencyPicker: false,
+    showPushplusPopup: false,
+    pushplusTokenInput: "",
+    savingPushplusToken: false,
     submitting: false
   },
 
   onLoad(query) {
+    this.userSettingsPromise = this.loadUserSettings();
+
     // 计算今天日期字符串和今天零点的时间戳，用于限制日期选择器最小可选日期
     const now = new Date();
     const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -100,12 +115,10 @@ Page({
       this.setData({ isEdit: true, taskId: query.id, todayTimestamp, todayStr });
       this.loadTask(query.id);
     } else {
-      const savedToken = wx.getStorageSync("pushplus_token");
       const isFx = query.monitorType === "exchange_rate";
       const baseData = {
         todayTimestamp,
-        todayStr,
-        "form.pushplusToken": savedToken || ""
+        todayStr
       };
 
       // 如果从 FAB 浮层传入了监控类型参数，预选择
@@ -121,8 +134,24 @@ Page({
     }
   },
 
+  async loadUserSettings() {
+    try {
+      const userSettings = await getUserSettings();
+      this.setData({
+        userSettings,
+        userSilentRangeText: formatSilentRange(userSettings),
+        pushplusTokenInput: userSettings.pushplusToken || ""
+      });
+      return userSettings;
+    } catch (error) {
+      console.warn("加载用户设置失败:", error);
+      return null;
+    }
+  },
+
   async loadTask(id) {
     try {
+      const userSettings = await this.userSettingsPromise;
       const task = await request({ url: `/tasks/${id}` });
       const monitorType = task.monitorType || "flight";
       const monitorTypeIndex = MONITOR_TYPES.indexOf(monitorType);
@@ -177,8 +206,9 @@ Page({
           targetPrice: task.targetPrice ? String(task.targetPrice) : "",
           notifyOnDrop: task.notifyOnDrop !== false,
           checkIntervalSec: String(task.checkIntervalSec || (monitorType === "exchange_rate" ? 300 : 600)),
-          pushplusToken: task.pushplusToken || "",
+          pushplusEnabled: task.pushplusEnabled == null ? !!task.pushplusToken : task.pushplusEnabled !== false,
           subscribeEnabled: task.subscribeEnabled !== false,
+          silentHoursEnabled: task.silentHoursEnabled !== false,
           active: task.active !== false
         },
         placeFromText: task.placeFrom ? getCityByCode(task.placeFrom) || task.placeFrom : "",
@@ -188,7 +218,12 @@ Page({
         departDateLabel: finalDepartDate ? formatDateLong(finalDepartDate) : "",
         departDateValue: finalDepartDate ? `${finalDepartDate.slice(0, 4)}-${finalDepartDate.slice(4, 6)}-${finalDepartDate.slice(6, 8)}` : "",
         returnDateLabel: finalReturnDate ? formatDateLong(finalReturnDate) : "",
-        returnDateValue: finalReturnDate ? `${finalReturnDate.slice(0, 4)}-${finalReturnDate.slice(4, 6)}-${finalReturnDate.slice(6, 8)}` : ""
+        returnDateValue: finalReturnDate ? `${finalReturnDate.slice(0, 4)}-${finalReturnDate.slice(4, 6)}-${finalReturnDate.slice(6, 8)}` : "",
+        userSettings: userSettings || this.data.userSettings,
+        userSilentRangeText: formatSilentRange(userSettings || this.data.userSettings || {
+          silentStart: DEFAULT_SILENT_START,
+          silentEnd: DEFAULT_SILENT_END
+        })
       });
     } catch (error) {
       wx.showToast({ title: "加载任务失败", icon: "none" });
@@ -349,11 +384,63 @@ Page({
     this.setData({ "form.subscribeEnabled": event.detail.value });
   },
 
+  onPushplusEnabledChange(event) {
+    const enabled = event.detail.value;
+    const hasSavedToken = !!String(this.data.userSettings?.pushplusToken || "").trim();
+    if (enabled && !hasSavedToken) {
+      this.setData({
+        showPushplusPopup: true,
+        pushplusTokenInput: wx.getStorageSync("pushplus_token") || ""
+      });
+      return;
+    }
+    this.setData({ "form.pushplusEnabled": enabled });
+  },
+
+  onSilentHoursEnabledChange(event) {
+    this.setData({ "form.silentHoursEnabled": event.detail.value });
+  },
+
+  onPushplusTokenInputChange(event) {
+    this.setData({ pushplusTokenInput: event.detail.value });
+  },
+
+  closePushplusPopup() {
+    this.setData({ showPushplusPopup: false });
+  },
+
+  async savePushplusToken() {
+    const token = String(this.data.pushplusTokenInput || "").trim();
+    if (!token) {
+      wx.showToast({ title: "请输入 PushPlus Token", icon: "none" });
+      return;
+    }
+
+    this.setData({ savingPushplusToken: true });
+    try {
+      const userSettings = await saveUserSettings({ pushplusToken: token });
+      this.userSettingsPromise = Promise.resolve(userSettings);
+      wx.setStorageSync("pushplus_token", token);
+      this.setData({
+        userSettings,
+        userSilentRangeText: formatSilentRange(userSettings),
+        showPushplusPopup: false,
+        "form.pushplusEnabled": true
+      });
+      wx.showToast({ title: "保存成功", icon: "success" });
+    } catch (error) {
+      wx.showToast({ title: error.message || "保存失败", icon: "none" });
+    } finally {
+      this.setData({ savingPushplusToken: false });
+    }
+  },
+
   async submit() {
     if (this.data.submitting) return;
 
     const { form, monitorTypeIndex, isEdit, taskId } = this.data;
     const monitorType = MONITOR_TYPES[monitorTypeIndex];
+    const userSettings = this.data.userSettings || await (this.userSettingsPromise || this.loadUserSettings());
 
     if (monitorType === "exchange_rate") {
       // 汇率监控校验
@@ -400,10 +487,20 @@ Page({
     const autoName = generateTaskName(form, this.data.flightWayIndex, monitorType);
     let subscribeAccepted = false;
 
-    // 获取 openid（如果开启了订阅消息）
-    let openid = "";
-    if (form.subscribeEnabled && SUBSCRIBE_TEMPLATE_ID) {
+    let openid = userSettings?.openid || "";
+    if (!openid) {
       openid = await ensureOpenid();
+    }
+    if (!openid) {
+      wx.showToast({ title: "获取用户身份失败", icon: "none" });
+      return;
+    }
+
+    const hasPushplusToken = !!String(userSettings?.pushplusToken || "").trim();
+    if (form.pushplusEnabled && !hasPushplusToken) {
+      this.setData({ showPushplusPopup: true });
+      wx.showToast({ title: "请先保存 PushPlus Token", icon: "none" });
+      return;
     }
 
     // 按监控类型分别构建 payload，避免字段互相污染
@@ -414,8 +511,10 @@ Page({
       checkIntervalSec: Number(form.checkIntervalSec) || (monitorType === "exchange_rate" ? 300 : 600),
       targetPrice: form.targetPrice ? Number(form.targetPrice) : null,
       notifyOnDrop: form.notifyOnDrop,
-      pushplusToken: form.pushplusToken,
+      pushplusEnabled: form.pushplusEnabled,
+      pushplusToken: form.pushplusEnabled ? String(userSettings?.pushplusToken || "").trim() : "",
       subscribeEnabled: form.subscribeEnabled,
+      silentHoursEnabled: form.silentHoursEnabled,
       active: form.active,
       openid
     };
@@ -449,10 +548,6 @@ Page({
         if (!isEdit && subscribeAccepted) {
           payload.subscribeQuota = 1;
         }
-      }
-
-      if (form.pushplusToken) {
-        wx.setStorageSync("pushplus_token", form.pushplusToken);
       }
 
       if (isEdit) {

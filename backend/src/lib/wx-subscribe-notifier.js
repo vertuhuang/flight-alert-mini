@@ -21,23 +21,30 @@ class WxSubscribeNotifier {
   /**
    * Get a valid access_token, refreshing if expired.
    */
-  async #getAccessToken() {
+  async #getAccessToken({ forceRefresh = false } = {}) {
     if (!WX_APPID || !WX_APPSECRET) {
       throw new Error("WX_APPID 或 WX_APPSECRET 未配置");
     }
 
     const now = Date.now();
-    if (this.accessToken && now < this.tokenExpiresAt) {
+    if (!forceRefresh && this.accessToken && now < this.tokenExpiresAt) {
       return this.accessToken;
     }
 
-    const url = `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${WX_APPID}&secret=${WX_APPSECRET}`;
+    const url = "https://api.weixin.qq.com/cgi-bin/stable_token";
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
       const response = await fetch(url, {
-        method: "GET",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          grant_type: "client_credential",
+          appid: WX_APPID,
+          secret: WX_APPSECRET,
+          force_refresh: forceRefresh
+        }),
         signal: controller.signal
       });
 
@@ -50,6 +57,37 @@ class WxSubscribeNotifier {
       // Expire 5 minutes early to avoid edge cases
       this.tokenExpiresAt = now + (data.expires_in - 300) * 1000;
       return this.accessToken;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async #sendWithToken(token, { openid, tid, data, page }) {
+    const url = `https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=${token}`;
+    const body = {
+      touser: openid,
+      template_id: tid,
+      data,
+      miniprogram_state: "formal",
+      lang: "zh_CN"
+    };
+
+    if (page) {
+      body.page = page;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+
+      return response.json();
     } finally {
       clearTimeout(timer);
     }
@@ -76,50 +114,27 @@ class WxSubscribeNotifier {
     }
 
     try {
-      const token = await this.#getAccessToken();
-      const url = `https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=${token}`;
+      let token = await this.#getAccessToken();
+      let result = await this.#sendWithToken(token, { openid, tid, data, page });
 
-      const body = {
-        touser: openid,
-        template_id: tid,
-        data,
-        miniprogram_state: "formal",
-        lang: "zh_CN"
+      if (result.errcode === 40001) {
+        token = await this.#getAccessToken({ forceRefresh: true });
+        result = await this.#sendWithToken(token, { openid, tid, data, page });
+      }
+
+      if (result.errcode === 0) {
+        return { ok: true, errcode: 0 };
+      }
+
+      // Common error codes:
+      // 43101: user has not subscribed / subscription expired
+      // 40003: invalid openid
+      // 40001: invalid credential, access_token invalid or not latest
+      return {
+        ok: false,
+        errcode: result.errcode,
+        errmsg: result.errmsg
       };
-
-      if (page) {
-        body.page = page;
-      }
-
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-      try {
-        const response = await fetch(url, {
-          method: "POST",
-          signal: controller.signal,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body)
-        });
-
-        const result = await response.json();
-
-        if (result.errcode === 0) {
-          return { ok: true, errcode: 0 };
-        }
-
-        // Common error codes:
-        // 43101: user has not subscribed / subscription expired
-        // 40003: invalid openid
-        // 41028: form_id invalid (not relevant for subscribe messages)
-        return {
-          ok: false,
-          errcode: result.errcode,
-          errmsg: result.errmsg
-        };
-      } finally {
-        clearTimeout(timer);
-      }
     } catch (error) {
       return {
         ok: false,

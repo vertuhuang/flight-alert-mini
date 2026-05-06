@@ -7,6 +7,11 @@
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-fab": "tdesign-miniprogram/fab/fab",
     "t-action-sheet": "tdesign-miniprogram/action-sheet/action-sheet",
-    "t-dialog": "tdesign-miniprogram/dialog/dialog"
+    "t-dialog": "tdesign-miniprogram/dialog/dialog",
+    "t-popup": "tdesign-miniprogram/popup/popup",
+    "t-input": "tdesign-miniprogram/input/input",
+    "t-cell": "tdesign-miniprogram/cell/cell",
+    "t-picker": "tdesign-miniprogram/picker/picker",
+    "t-picker-item": "tdesign-miniprogram/picker-item/picker-item"
   }
 }

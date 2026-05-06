@@ -1,4 +1,11 @@
 <view class="page">
+  <view class="toolbar">
+    <view class="toolbar-action" bindtap="openSettings">
+      <text class="toolbar-action-text">设置</text>
+    </view>
+    <text class="toolbar-status">{{healthText}}</text>
+  </view>
+
   <!-- Task list -->
   <block wx:if="{{tasks.length}}">
     <block wx:for="{{tasks}}" wx:key="id">
@@ -68,6 +75,59 @@
     bind:cancel="onActionSheetClose"
     bind:visible-change="onActionSheetVisibleChange"
   />
+
+  <t-action-sheet
+    visible="{{showSettingsSheet}}"
+    items="{{settingsItems}}"
+    bind:selected="onSettingsSelect"
+    bind:cancel="onSettingsClose"
+    bind:visible-change="onSettingsClose"
+  />
+
+  <t-popup visible="{{showPushplusPopup}}" placement="bottom" bind:visible-change="closePushplusPopup">
+    <view class="settings-popup">
+      <view class="settings-popup-title">PushPlus Token 设置</view>
+      <view class="settings-popup-desc">只需保存一次，后续创建任务时可直接开启 PushPlus 推送。</view>
+      <t-input
+        label="PushPlus Token"
+        placeholder="请输入 PushPlus Token"
+        value="{{pushplusTokenInput}}"
+        bind:change="onPushplusInputChange"
+      />
+      <view class="settings-popup-actions">
+        <t-button theme="default" variant="outline" bind:tap="closePushplusPopup">取消</t-button>
+        <t-button theme="primary" loading="{{savingUserSettings}}" bind:tap="savePushplusToken">保存</t-button>
+      </view>
+    </view>
+  </t-popup>
+
+  <t-popup visible="{{showSilentPopup}}" placement="bottom" bind:visible-change="closeSilentPopup">
+    <view class="settings-popup">
+      <view class="settings-popup-title">静默时段设置</view>
+      <view class="settings-popup-desc">默认在该时段内暂停所有开启“遵循静默时段”的任务。</view>
+      <t-cell title="开始时间" arrow bindtap="openSilentPicker" data-field="start">
+        <text slot="note">{{silentDraftStart}}</text>
+      </t-cell>
+      <t-cell title="结束时间" arrow bindtap="openSilentPicker" data-field="end">
+        <text slot="note">{{silentDraftEnd}}</text>
+      </t-cell>
+      <view class="settings-popup-actions">
+        <t-button theme="default" variant="outline" bind:tap="closeSilentPopup">取消</t-button>
+        <t-button theme="primary" loading="{{savingUserSettings}}" bind:tap="saveSilentSettings">保存</t-button>
+      </view>
+    </view>
+  </t-popup>
+
+  <t-picker
+    visible="{{showTimePicker}}"
+    title="{{timePickerTitle}}"
+    value="{{timePickerValue}}"
+    bind:confirm="onSilentPickerConfirm"
+    bind:cancel="onSilentPickerCancel"
+  >
+    <t-picker-item options="{{timePickerOptions[0]}}"></t-picker-item>
+    <t-picker-item options="{{timePickerOptions[1]}}"></t-picker-item>
+  </t-picker>
 
   <!-- Delete Dialog -->
   <t-dialog

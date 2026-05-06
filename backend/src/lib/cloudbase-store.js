@@ -2,7 +2,8 @@ const {
   CLOUDBASE_ENV_ID,
   EVENTS_COLLECTION,
   HISTORIES_COLLECTION,
-  TASKS_COLLECTION
+  TASKS_COLLECTION,
+  USERS_COLLECTION
 } = require("../config");
 
 function stripDocumentMeta(item) {
@@ -75,8 +76,9 @@ class CloudBaseStore {
     await this.init();
 
     try {
-      const [tasksRes, historiesRes, eventsRes] = await Promise.all([
+      const [tasksRes, usersRes, historiesRes, eventsRes] = await Promise.all([
         this.db.collection(TASKS_COLLECTION).limit(1000).get(),
+        this.db.collection(USERS_COLLECTION).limit(1000).get(),
         this.db.collection(HISTORIES_COLLECTION).limit(1000).get(),
         this.db.collection(EVENTS_COLLECTION).limit(1000).get()
       ]);
@@ -85,6 +87,12 @@ class CloudBaseStore {
         .map(stripDocumentMeta)
         .sort(
           (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
+
+      const users = (usersRes.data || [])
+        .map(stripDocumentMeta)
+        .sort(
+          (a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
         );
 
       const histories = {};
@@ -120,6 +128,7 @@ class CloudBaseStore {
 
       return {
         tasks,
+        users,
         histories,
         events
       };
@@ -133,6 +142,7 @@ class CloudBaseStore {
     await this.init();
     const current = await this.read();
     await this.#syncCollection(TASKS_COLLECTION, current.tasks, data.tasks || []);
+    await this.#syncCollection(USERS_COLLECTION, current.users, data.users || []);
     await this.#syncCollection(
       HISTORIES_COLLECTION,
       flattenHistories(current.histories),
@@ -203,6 +213,48 @@ class CloudBaseStore {
       }
       throw error;
     }
+  }
+
+  async getUserByOpenid(openid) {
+    await this.init();
+    const res = await this.db
+      .collection(USERS_COLLECTION)
+      .where({ openid })
+      .limit(1)
+      .get();
+    return stripDocumentMeta(normalizeDocResult(res.data));
+  }
+
+  async getUsersByOpenids(openids) {
+    await this.init();
+    const ids = [...new Set((openids || []).filter(Boolean))];
+    if (!ids.length) {
+      return {};
+    }
+
+    const _ = this.db.command;
+    const res = await this.db
+      .collection(USERS_COLLECTION)
+      .where({
+        openid: _.in(ids)
+      })
+      .limit(1000)
+      .get();
+
+    const result = {};
+    for (const item of res.data || []) {
+      const user = stripDocumentMeta(item);
+      if (user?.openid) {
+        result[user.openid] = user;
+      }
+    }
+    return result;
+  }
+
+  async writeUser(user) {
+    await this.init();
+    await this.db.collection(USERS_COLLECTION).doc(user.id).set(user);
+    return user;
   }
 
   async writeTask(task) {

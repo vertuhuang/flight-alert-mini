@@ -16,6 +16,9 @@ const {
 const { getCityByCode } = require("./airports");
 
 const HISTORY_RETENTION_LIMIT = 30;
+const DEFAULT_SILENT_START = "00:00";
+const DEFAULT_SILENT_END = "08:00";
+const CHINA_TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
 
 class MonitorService {
   constructor({ store, provider, notifier, wxSubscribeNotifier }) {
@@ -69,7 +72,19 @@ class MonitorService {
         );
       }
 
-      for (const task of dueTasks) {
+      const openids = [...new Set(dueTasks.map((task) => task.openid).filter(Boolean))];
+      const usersByOpenid =
+        openids.length > 0 && typeof this.store.getUsersByOpenids === "function"
+          ? await this.store.getUsersByOpenids(openids)
+          : {};
+
+      for (const rawTask of dueTasks) {
+        const task = this.#normalizeTaskSettings(rawTask);
+        const user = this.#normalizeUserSettings(task.openid, usersByOpenid[task.openid]);
+        if (this.#isTaskSilenced(task, user, now)) {
+          await this.#markTaskSilencedUntil(task, user, now);
+          continue;
+        }
         await this.checkTask(task.id);
       }
     } finally {
@@ -90,7 +105,7 @@ class MonitorService {
           : {};
 
       return tasks.map((task) => ({
-        ...task,
+        ...this.#normalizeTaskSettings(task),
         ...(task.latestChange
           ? {
               lastPriceChangeAt: task.lastPriceChangeAt || null,
@@ -111,7 +126,7 @@ class MonitorService {
       .map((task) => {
         const histories = db.histories[task.id] || [];
         return {
-          ...task,
+          ...this.#normalizeTaskSettings(task),
           ...this.#buildLatestChangePayload(task, histories)
         };
       });
@@ -119,11 +134,13 @@ class MonitorService {
 
   async getTask(id) {
     if (typeof this.store.getTask === "function") {
-      return this.store.getTask(id);
+      const task = await this.store.getTask(id);
+      return task ? this.#normalizeTaskSettings(task) : null;
     }
 
     const db = await this.store.read();
-    return db.tasks.find((task) => task.id === id) || null;
+    const task = db.tasks.find((item) => item.id === id) || null;
+    return task ? this.#normalizeTaskSettings(task) : null;
   }
 
   async getHistory(id) {
@@ -211,6 +228,46 @@ class MonitorService {
     }
 
     return updated;
+  }
+
+  async getUserSettings(openid) {
+    const normalizedOpenid = String(openid || "").trim();
+    if (!normalizedOpenid) {
+      throw new Error("openid 不能为空");
+    }
+
+    const user =
+      typeof this.store.getUserByOpenid === "function"
+        ? await this.store.getUserByOpenid(normalizedOpenid)
+        : ((await this.store.read()).users || []).find((item) => item.openid === normalizedOpenid) || null;
+
+    return this.#normalizeUserSettings(normalizedOpenid, user);
+  }
+
+  async updateUserSettings(input) {
+    const openid = String(input.openid || "").trim();
+    if (!openid) {
+      throw new Error("openid 不能为空");
+    }
+
+    const current = await this.getUserSettings(openid);
+    const next = this.#buildUserSettingsPayload(current, input);
+
+    if (typeof this.store.writeUser === "function") {
+      await this.store.writeUser(next);
+    } else {
+      await this.store.update((db) => ({
+        ...db,
+        users: [
+          next,
+          ...((db.users || []).filter((item) => item.openid !== openid))
+        ]
+      }));
+    }
+
+    await this.#rescheduleTasksForUserSettingsChange(current, next);
+
+    return next;
   }
 
   async stopAllTasks() {
@@ -317,6 +374,12 @@ class MonitorService {
       }
     }
 
+    if (!partial || input.openid != null) {
+      if (!String(input.openid || "").trim()) {
+        throw new Error("openid 不能为空");
+      }
+    }
+
     if (monitorType === "exchange_rate") {
       // 汇率监控校验
       if (!partial || input.baseCurrency != null) {
@@ -393,8 +456,14 @@ class MonitorService {
       targetPrice,
       notifyOnDrop,
       pushplusToken: String(input.pushplusToken || "").trim(),
+      pushplusEnabled:
+        input.pushplusEnabled == null
+          ? Boolean(String(input.pushplusToken || "").trim())
+          : Boolean(input.pushplusEnabled),
       openid: String(input.openid || "").trim(),
       subscribeEnabled: input.subscribeEnabled == null ? false : Boolean(input.subscribeEnabled),
+      silentHoursEnabled:
+        input.silentHoursEnabled == null ? true : Boolean(input.silentHoursEnabled),
       active: input.active == null ? true : Boolean(input.active)
     };
 
@@ -433,10 +502,12 @@ class MonitorService {
     const payload = this.validateTaskInput(input);
     const now = isoNow();
     const initialSubscribeQuota = Math.max(0, Number(input.subscribeQuota || 0));
+    const pushplusToken = await this.#resolveTaskPushplusToken(payload);
 
     const task = {
       id: createId("task"),
       ...payload,
+      pushplusToken,
       baseline: {},
       latestSnapshot: null,
       latestSummary: null,
@@ -471,7 +542,7 @@ class MonitorService {
     }
 
     // 首次检查价格并发送创建通知
-    const hasPushPlus = !!task.pushplusToken;
+    const hasPushPlus = !!task.pushplusEnabled && !!task.pushplusToken;
     const hasSubscribe = !!task.openid && task.subscribeEnabled;
     if (hasPushPlus || hasSubscribe) {
       this.#withTaskCheckLock(task.id, () => this.#initialCheckAndNotify(task)).catch((err) => {
@@ -489,7 +560,14 @@ class MonitorService {
 
   async #initialCheckAndNotify(task) {
     try {
-      const snapshot = await this.provider.fetchPrices(task);
+      const normalizedTask = this.#normalizeTaskSettings(task);
+      const user = await this.getUserSettings(normalizedTask.openid);
+      if (this.#isTaskSilenced(normalizedTask, user, Date.now())) {
+        const updated = await this.#markTaskSilencedUntil(normalizedTask, user, Date.now());
+        return { task: updated, notifyResults: [], skipped: "silent" };
+      }
+
+      const snapshot = await this.provider.fetchPrices(normalizedTask);
       const summary = buildSummaryFromSnapshot(snapshot);
       const checkedAt = isoNow();
       const nextCheckAt = new Date(
@@ -497,15 +575,15 @@ class MonitorService {
       ).toISOString();
 
       const updatedTask = {
-        ...task,
+        ...normalizedTask,
         baseline: this.#buildBaseline(snapshot),
         latestSnapshot: snapshot,
         latestSummary: summary,
-        latestChange: task.latestChange || null,
+        latestChange: normalizedTask.latestChange || null,
         lastError: null,
         lastCheckedAt: checkedAt,
-        lastPriceChangeAt: task.lastPriceChangeAt || null,
-        seenPriceKeys: this.#mergeSeenPriceKeys(task, [], snapshot),
+        lastPriceChangeAt: normalizedTask.lastPriceChangeAt || null,
+        seenPriceKeys: this.#mergeSeenPriceKeys(normalizedTask, [], snapshot),
         nextCheckAt,
         updatedAt: checkedAt
       };
@@ -514,60 +592,31 @@ class MonitorService {
       const notifyResults = [];
 
       let title, content;
-      if (task.monitorType === "exchange_rate") {
-        const pair = `${task.baseCurrency}/${task.quoteCurrency}`;
+      if (normalizedTask.monitorType === "exchange_rate") {
+        const pair = `${normalizedTask.baseCurrency}/${normalizedTask.quoteCurrency}`;
         const rate = summary?.minPrice != null ? summary.minPrice.toFixed(4) : "暂无";
         title = `🔔 ${pair} 汇率监控已启动`;
-        content = `监控货币对：${pair}\n当前汇率：${rate}\n变动阈值：${task.threshold}\n检查间隔：${task.checkIntervalSec}秒`;
+        content = `监控货币对：${pair}\n当前汇率：${rate}\n变动阈值：${normalizedTask.threshold}\n检查间隔：${normalizedTask.checkIntervalSec}秒`;
       } else {
-        const fromCity = getCityByCode(task.placeFrom);
-        const toCity = getCityByCode(task.placeTo);
-        const dateText = task.departDates.map((d) => `${d.slice(4, 6)}月${d.slice(6, 8)}日`).join("、");
+        const fromCity = getCityByCode(normalizedTask.placeFrom);
+        const toCity = getCityByCode(normalizedTask.placeTo);
+        const dateText = normalizedTask.departDates.map((d) => `${d.slice(4, 6)}月${d.slice(6, 8)}日`).join("、");
         title = `${fromCity}飞${toCity}票价监控已创建`;
         content = `${dateText}${fromCity}飞${toCity} 当前最低价${summary?.minPrice || "暂无"}元`;
       }
 
       // PushPlus 通知
-      if (task.pushplusToken) {
+      const pushplusToken = await this.#resolveTaskPushplusToken(normalizedTask);
+      if (pushplusToken) {
         const ppResult = await this.notifier.send({
-          token: task.pushplusToken,
+          token: pushplusToken,
           title,
           content
         });
         notifyResults.push({ channel: "pushplus", result: ppResult });
       }
 
-      // 微信订阅消息通知（检查配额）
-      if (task.openid && task.subscribeEnabled && task.subscribeQuota > 0 && this.wxSubscribeNotifier) {
-        const { WxSubscribeNotifier } = require("./wx-subscribe-notifier");
-        let subscribeData;
-        if (task.monitorType === "exchange_rate") {
-          const now = new Date(Date.now() + 8 * 60 * 60 * 1000);
-          const timeStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")} ${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
-          const code = `${task.baseCurrency}-${task.quoteCurrency}`;
-          const rate = summary?.minPrice != null ? String(summary.minPrice) : "0";
-          subscribeData = {
-            character_string1: { value: code },
-            amount4: { value: rate },
-            time11: { value: timeStr },
-            amount14: { value: "0" }
-          };
-        } else {
-          const fromCity = getCityByCode(task.placeFrom);
-          const toCity = getCityByCode(task.placeTo);
-          subscribeData = WxSubscribeNotifier.buildTaskCreatedData(task, summary, fromCity, toCity);
-        }
-        const wxResult = await this.wxSubscribeNotifier.send({
-          openid: task.openid,
-          data: subscribeData,
-          page: `pages/task-detail/task-detail?id=${task.id}`
-        });
-        // 发送成功后消耗配额
-        if (wxResult && wxResult.errcode === 0) {
-          await this.consumeSubscribeQuota(task.id);
-        }
-        notifyResults.push({ channel: "wxsubscribe", result: wxResult, quotaConsumed: wxResult?.errcode === 0 });
-      }
+      // 微信订阅消息是一次性额度。创建任务时不消耗它，保留给真正的变价通知。
 
       if (typeof this.store.writeTask === "function") {
         await this.store.writeTask(updatedTask);
@@ -619,9 +668,14 @@ class MonitorService {
       ...patch
     };
     const payload = this.validateTaskInput(mergedInput, { partial: true });
+    const pushplusToken = await this.#resolveTaskPushplusToken({
+      ...current,
+      ...payload
+    });
     const updated = {
       ...current,
       ...payload,
+      pushplusToken,
       baseline: current.baseline || {},
       updatedAt: isoNow()
     };
@@ -656,6 +710,23 @@ class MonitorService {
       }
       // 从暂停恢复活跃时重置 nextCheckAt
       if (patch.active === true && !current.active) {
+        updated.nextCheckAt = isoNow();
+      }
+    }
+
+    if (updated.active && updated.openid) {
+      const nowMs = Date.now();
+      const user = await this.getUserSettings(updated.openid);
+      if (
+        updated.silentHoursEnabled !== false &&
+        this.#isTaskSilenced(updated, user, nowMs)
+      ) {
+        updated.nextCheckAt = this.#getSilentResumeIso(user, nowMs);
+      } else if (
+        !needsReset &&
+        patch.silentHoursEnabled !== undefined &&
+        Boolean(patch.silentHoursEnabled) !== Boolean(current.silentHoursEnabled)
+      ) {
         updated.nextCheckAt = isoNow();
       }
     }
@@ -713,9 +784,17 @@ class MonitorService {
       throw new Error("task_not_found");
     }
 
+    const normalizedTask = this.#normalizeTaskSettings(task);
+    const user = await this.getUserSettings(normalizedTask.openid);
+
+    if (this.#isTaskSilenced(normalizedTask, user, Date.now())) {
+      const updated = await this.#markTaskSilencedUntil(normalizedTask, user, Date.now());
+      return { task: updated, changes: [], skipped: "silent" };
+    }
+
     // 自动过期检查：如果任务已过期，自动暂停并不再检查价格
-    if (task.active && this.#isTaskExpired(task)) {
-      const updated = { ...task, active: false, updatedAt: isoNow() };
+    if (normalizedTask.active && this.#isTaskExpired(normalizedTask)) {
+      const updated = { ...normalizedTask, active: false, updatedAt: isoNow() };
       if (typeof this.store.writeTask === "function") {
         await this.store.writeTask(updated);
       } else {
@@ -728,17 +807,17 @@ class MonitorService {
     }
 
     try {
-      const snapshot = await this.provider.fetchPrices(task);
-      const changes = this.#compareSnapshot(task, snapshot, histories || []);
+      const snapshot = await this.provider.fetchPrices(normalizedTask);
+      const changes = this.#compareSnapshot(normalizedTask, snapshot, histories || []);
       const checkedAt = isoNow();
       const summary = buildSummaryFromSnapshot(snapshot);
       const nextCheckAt = new Date(
         Date.now() + task.checkIntervalSec * 1000
       ).toISOString();
       const seenPriceKeys = this.#mergeSeenPriceKeys(task, histories || [], snapshot);
-      const previousMinPrice = task.latestSummary?.minPrice;
+      const previousMinPrice = normalizedTask.latestSummary?.minPrice;
       const existingLatestChangePayload = this.#buildLatestChangePayload(
-        task,
+        normalizedTask,
         histories || []
       );
       let latestChange = existingLatestChangePayload.latestChange;
@@ -760,7 +839,7 @@ class MonitorService {
       }
 
       const updatedTask = {
-        ...task,
+        ...normalizedTask,
         baseline: this.#buildBaseline(snapshot),
         latestSnapshot: snapshot,
         latestSummary: summary,
@@ -779,26 +858,28 @@ class MonitorService {
       // Filter changes for notification based on strategy
       const notifyChanges = changes.filter((change) => {
         if (change.type === "initial") return false;
+        if (change.meetsThreshold === false) return false;
 
         // 目标价格触发：价格下降到目标价以下（无论是否开启仅降价通知）
-        if (task.targetPrice && change.type === "drop" && change.current <= task.targetPrice) {
+        if (normalizedTask.targetPrice && change.type === "drop" && change.current <= normalizedTask.targetPrice) {
           return true;
         }
 
         // notifyOnDrop: only notify on price drops
-        if (task.notifyOnDrop && change.type === "rise") return false;
+        if (normalizedTask.notifyOnDrop && change.type === "rise") return false;
 
         return true;
       });
 
       const notifyResults = [];
       // PushPlus 通知
-      if (notifyChanges.length > 0 && task.pushplusToken) {
+      const pushplusToken = await this.#resolveTaskPushplusToken(normalizedTask);
+      if (notifyChanges.length > 0 && pushplusToken) {
         const firstChange = notifyChanges[0];
         const isDrop = firstChange.type === "drop";
         let title, content;
-        if (task.monitorType === "exchange_rate") {
-          const pair = `${task.baseCurrency}/${task.quoteCurrency}`;
+        if (normalizedTask.monitorType === "exchange_rate") {
+          const pair = `${normalizedTask.baseCurrency}/${normalizedTask.quoteCurrency}`;
           const trend = isDrop ? "下跌" : "上涨";
           const trendEmoji = isDrop ? "📉" : "📈";
           const currentRate = summary?.minPrice != null ? summary.minPrice.toFixed(4) : firstChange.current;
@@ -807,16 +888,16 @@ class MonitorService {
           title = `${trendEmoji} ${pair} 汇率${trend} ${deltaAbs}`;
           content = `${pair} 当前汇率 ${currentRate}\n较上次${isDrop ? "下跌" : "上涨"} ${deltaAbs}\n变动幅度 ${((deltaAbs / currentRate) * 100).toFixed(2)}%`;
         } else {
-          const fromCity = getCityByCode(task.placeFrom);
-          const toCity = getCityByCode(task.placeTo);
-          const dateText = task.departDates.map((d) => `${d.slice(4, 6)}月${d.slice(6, 8)}日`).join("、");
+          const fromCity = getCityByCode(normalizedTask.placeFrom);
+          const toCity = getCityByCode(normalizedTask.placeTo);
+          const dateText = normalizedTask.departDates.map((d) => `${d.slice(4, 6)}月${d.slice(6, 8)}日`).join("、");
           const delta = firstChange.delta;
           const deltaAbs = Math.abs(delta);
           title = `${fromCity}到${toCity}机票（${dateText}）${isDrop ? "降价" : "涨价"} ${deltaAbs} 元`;
           content = `${dateText} ${fromCity}飞${toCity}当前最低价${summary?.minPrice || firstChange.current}元，比上次${isDrop ? "跌" : "涨"}了${deltaAbs}元`;
         }
         const result = await this.notifier.send({
-          token: task.pushplusToken,
+          token: pushplusToken,
           title,
           content
         });
@@ -824,15 +905,15 @@ class MonitorService {
       }
 
       // 微信订阅消息通知（检查配额）
-      if (notifyChanges.length > 0 && task.openid && task.subscribeEnabled && task.subscribeQuota > 0 && this.wxSubscribeNotifier) {
+      if (notifyChanges.length > 0 && normalizedTask.openid && normalizedTask.subscribeEnabled && normalizedTask.subscribeQuota > 0 && this.wxSubscribeNotifier) {
         const { WxSubscribeNotifier } = require("./wx-subscribe-notifier");
         let subscribeData;
-        if (task.monitorType === "exchange_rate") {
+        if (normalizedTask.monitorType === "exchange_rate") {
           const firstChange = notifyChanges[0];
           const changeType = firstChange.type;
           const now = new Date(Date.now() + 8 * 60 * 60 * 1000);
           const timeStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")} ${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
-          const code = `${task.baseCurrency}-${task.quoteCurrency}`;
+          const code = `${normalizedTask.baseCurrency}-${normalizedTask.quoteCurrency}`;
           const rate = firstChange.current != null ? String(firstChange.current) : "0";
           const rawDelta = firstChange.delta != null ? firstChange.delta : 0;
           const diff = changeType === "drop" ? `-${Math.abs(rawDelta).toFixed(4)}` : `${Math.abs(rawDelta).toFixed(4)}`;
@@ -843,25 +924,30 @@ class MonitorService {
             amount14: { value: diff }
           };
         } else {
-          const fromCity = getCityByCode(task.placeFrom);
-          const toCity = getCityByCode(task.placeTo);
-          subscribeData = WxSubscribeNotifier.buildPriceChangeData(task, notifyChanges, fromCity, toCity);
+          const fromCity = getCityByCode(normalizedTask.placeFrom);
+          const toCity = getCityByCode(normalizedTask.placeTo);
+          subscribeData = WxSubscribeNotifier.buildPriceChangeData(normalizedTask, notifyChanges, fromCity, toCity);
         }
         const wxResult = await this.wxSubscribeNotifier.send({
-          openid: task.openid,
+          openid: normalizedTask.openid,
           data: subscribeData,
-          page: `pages/task-detail/task-detail?id=${task.id}`
+          page: `pages/task-detail/task-detail?id=${normalizedTask.id}`
         });
-        // 发送成功后消耗配额
+        // 发送成功后在当前 task 快照上直接核销，避免后续 writeTask 用旧值覆盖。
         if (wxResult && wxResult.errcode === 0) {
-          await this.consumeSubscribeQuota(task.id);
+          updatedTask.subscribeQuota = Math.max(0, Number(updatedTask.subscribeQuota || 0) - 1);
         }
-        notifyResults.push({ channel: "wxsubscribe", result: wxResult, quotaConsumed: wxResult?.errcode === 0 });
+        notifyResults.push({
+          channel: "wxsubscribe",
+          result: wxResult,
+          quotaConsumed: wxResult?.errcode === 0,
+          subscribeQuota: updatedTask.subscribeQuota || 0
+        });
       }
 
       // Update unreadEvents count
       const unreadDelta = notifyChanges.length > 0 ? 1 : 0;
-      updatedTask.unreadEvents = (task.unreadEvents || 0) + unreadDelta;
+      updatedTask.unreadEvents = (normalizedTask.unreadEvents || 0) + unreadDelta;
 
       const historyRecord = shouldLogHistory
         ? {
@@ -1017,14 +1103,15 @@ class MonitorService {
 
       if (previous != null) {
         const delta = current - previous;
-        if (Math.abs(delta) >= task.threshold) {
+        if (delta !== 0) {
           changes.push({
             type: delta > 0 ? "rise" : "drop",
             key,
             label: `${snapshot.base}/${snapshot.quote}`,
             previous,
             current,
-            delta
+            delta,
+            meetsThreshold: Math.abs(delta) >= task.threshold
           });
         }
       }
@@ -1183,6 +1270,232 @@ class MonitorService {
       lastPriceChangeAt: latestChange?.checkedAt || lastHistory?.checkedAt || null,
       latestChange
     };
+  }
+
+  #normalizeTaskSettings(task) {
+    if (!task) {
+      return task;
+    }
+
+    return {
+      ...task,
+      pushplusEnabled:
+        task.pushplusEnabled == null
+          ? Boolean(String(task.pushplusToken || "").trim())
+          : Boolean(task.pushplusEnabled),
+      silentHoursEnabled:
+        task.silentHoursEnabled == null ? true : Boolean(task.silentHoursEnabled)
+    };
+  }
+
+  #normalizeUserSettings(openid, user = null) {
+    const normalizedOpenid = String(openid || "").trim();
+    const source = user || {};
+    return {
+      id: source.id || `user_${normalizedOpenid}`,
+      openid: normalizedOpenid,
+      pushplusToken: String(source.pushplusToken || "").trim(),
+      silentStart: this.#normalizeTimeValue(source.silentStart, DEFAULT_SILENT_START),
+      silentEnd: this.#normalizeTimeValue(source.silentEnd, DEFAULT_SILENT_END),
+      createdAt: source.createdAt || isoNow(),
+      updatedAt: source.updatedAt || source.createdAt || isoNow()
+    };
+  }
+
+  #buildUserSettingsPayload(current, patch) {
+    return {
+      ...current,
+      pushplusToken:
+        patch.pushplusToken == null
+          ? current.pushplusToken
+          : String(patch.pushplusToken || "").trim(),
+      silentStart: this.#normalizeTimeValue(
+        patch.silentStart == null ? current.silentStart : patch.silentStart,
+        DEFAULT_SILENT_START
+      ),
+      silentEnd: this.#normalizeTimeValue(
+        patch.silentEnd == null ? current.silentEnd : patch.silentEnd,
+        DEFAULT_SILENT_END
+      ),
+      updatedAt: isoNow()
+    };
+  }
+
+  #normalizeTimeValue(value, fallback) {
+    const raw = String(value || "").trim();
+    const match = raw.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) {
+      return fallback;
+    }
+
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      return fallback;
+    }
+
+    return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  }
+
+  #resolveTimeMinutes(value) {
+    const [hour, minute] = this.#normalizeTimeValue(value, DEFAULT_SILENT_START).split(":").map(Number);
+    return hour * 60 + minute;
+  }
+
+  #getChinaNowParts(nowMs = Date.now()) {
+    const local = new Date(nowMs + CHINA_TZ_OFFSET_MS);
+    return {
+      year: local.getUTCFullYear(),
+      month: local.getUTCMonth(),
+      date: local.getUTCDate(),
+      minutes: local.getUTCHours() * 60 + local.getUTCMinutes()
+    };
+  }
+
+  #isTaskSilenced(task, user, nowMs = Date.now()) {
+    if (!task?.active || task.silentHoursEnabled === false) {
+      return false;
+    }
+
+    const startMinutes = this.#resolveTimeMinutes(user?.silentStart || DEFAULT_SILENT_START);
+    const endMinutes = this.#resolveTimeMinutes(user?.silentEnd || DEFAULT_SILENT_END);
+    if (startMinutes === endMinutes) {
+      return false;
+    }
+
+    const { minutes } = this.#getChinaNowParts(nowMs);
+    if (startMinutes < endMinutes) {
+      return minutes >= startMinutes && minutes < endMinutes;
+    }
+
+    return minutes >= startMinutes || minutes < endMinutes;
+  }
+
+  #getSilentResumeIso(user, nowMs = Date.now()) {
+    const startMinutes = this.#resolveTimeMinutes(user?.silentStart || DEFAULT_SILENT_START);
+    const endMinutes = this.#resolveTimeMinutes(user?.silentEnd || DEFAULT_SILENT_END);
+    const parts = this.#getChinaNowParts(nowMs);
+    let dayOffset = 0;
+
+    if (startMinutes > endMinutes && parts.minutes >= startMinutes) {
+      dayOffset = 1;
+    }
+
+    const endHour = Math.floor(endMinutes / 60);
+    const endMinute = endMinutes % 60;
+    const utcMs =
+      Date.UTC(parts.year, parts.month, parts.date + dayOffset, endHour, endMinute) -
+      CHINA_TZ_OFFSET_MS;
+    return new Date(utcMs).toISOString();
+  }
+
+  async #markTaskSilencedUntil(task, user, nowMs = Date.now()) {
+    const updated = {
+      ...task,
+      nextCheckAt: this.#getSilentResumeIso(user, nowMs),
+      updatedAt: isoNow()
+    };
+
+    if (typeof this.store.writeTask === "function") {
+      await this.store.writeTask(updated);
+    } else {
+      await this.store.update((nextDb) => ({
+        ...nextDb,
+        tasks: nextDb.tasks.map((item) => (item.id === task.id ? updated : item))
+      }));
+    }
+
+    return updated;
+  }
+
+  async #rescheduleTasksForUserSettingsChange(previousUser, nextUser) {
+    const openid = String(nextUser?.openid || "").trim();
+    if (!openid) {
+      return;
+    }
+
+    const tasks =
+      typeof this.store.listTasks === "function"
+        ? await this.store.listTasks()
+        : (await this.store.read()).tasks;
+    const relatedTasks = tasks
+      .map((task) => this.#normalizeTaskSettings(task))
+      .filter(
+        (task) =>
+          task.openid === openid &&
+          task.active &&
+          task.silentHoursEnabled !== false
+      );
+
+    if (!relatedTasks.length) {
+      return;
+    }
+
+    const nowMs = Date.now();
+    const nowIso = isoNow();
+    const updates = relatedTasks
+      .map((task) => {
+        const wasSilenced = this.#isTaskSilenced(task, previousUser, nowMs);
+        const isSilenced = this.#isTaskSilenced(task, nextUser, nowMs);
+
+        if (isSilenced) {
+          const nextCheckAt = this.#getSilentResumeIso(nextUser, nowMs);
+          if (task.nextCheckAt === nextCheckAt) {
+            return null;
+          }
+          return {
+            ...task,
+            nextCheckAt,
+            updatedAt: nowIso
+          };
+        }
+
+        if (wasSilenced) {
+          return {
+            ...task,
+            nextCheckAt: nowIso,
+            updatedAt: nowIso
+          };
+        }
+
+        return null;
+      })
+      .filter(Boolean);
+
+    if (!updates.length) {
+      return;
+    }
+
+    if (typeof this.store.writeTask === "function") {
+      for (const task of updates) {
+        await this.store.writeTask(task);
+      }
+      return;
+    }
+
+    const updateMap = Object.fromEntries(updates.map((task) => [task.id, task]));
+    await this.store.update((db) => ({
+      ...db,
+      tasks: db.tasks.map((task) => updateMap[task.id] || task)
+    }));
+  }
+
+  async #resolveTaskPushplusToken(task) {
+    const normalizedTask = this.#normalizeTaskSettings(task);
+    if (!normalizedTask.pushplusEnabled) {
+      return "";
+    }
+
+    const taskToken = String(normalizedTask.pushplusToken || "").trim();
+    const user = normalizedTask.openid ? await this.getUserSettings(normalizedTask.openid) : null;
+    const userToken = String(user?.pushplusToken || "").trim();
+    const finalToken = userToken || taskToken;
+
+    if (!finalToken) {
+      throw new Error("PushPlus 通知已开启，但用户尚未保存 PushPlus Token");
+    }
+
+    return finalToken;
   }
 
   #buildMergedNotification(task, changes) {
