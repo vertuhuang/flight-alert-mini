@@ -2,6 +2,15 @@ App({
   async onLaunch() {
     const { runtimeMode, cloudEnv } = this.globalData;
 
+    // 静默获取 openid（放到最前面，尽早完成登录）
+    try {
+      const { ensureOpenid } = require("./utils/subscribe");
+      const openid = await ensureOpenid();
+      this.globalData.openid = openid || "";
+    } catch (err) {
+      console.warn("获取 openid 失败", err);
+    }
+
     if (runtimeMode !== "cloud") {
       return;
     }
@@ -22,6 +31,7 @@ App({
     runtimeMode: "cloud",
     cloudEnv: "cloud1-d3gu5h3dk5e16d52b",
     cloudService: "flight-alert-api",
-    apiBaseUrl: "http://127.0.0.1:8787/api"
+    apiBaseUrl: "http://127.0.0.1:8787/api",
+    openid: ""
   }
 });

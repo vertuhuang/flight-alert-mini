@@ -189,3 +189,10 @@ page {
 .history-row:last-child::after {
   display: none;
 }
+
+/* Tag 全局覆盖 - 缩小内边距 */
+.t-tag.t-tag--small {
+  padding: 0 6rpx !important;
+  font-size: 18rpx !important;
+  line-height: 28rpx !important;
+}

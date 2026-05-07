@@ -92,9 +92,11 @@ class MonitorService {
     }
   }
 
-  async listTasks() {
+  async listTasks(openid) {
+    let tasks;
+
     if (typeof this.store.listTasks === "function") {
-      const tasks = await this.store.listTasks();
+      tasks = await this.store.listTasks(openid || undefined);
       const missingLatestChangeIds = tasks
         .filter((task) => !task.latestChange)
         .map((task) => task.id);
@@ -104,7 +106,7 @@ class MonitorService {
           ? await this.store.getHistoriesByTaskIds(missingLatestChangeIds)
           : {};
 
-      return tasks.map((task) => ({
+      tasks = tasks.map((task) => ({
         ...this.#normalizeTaskSettings(task),
         ...(task.latestChange
           ? {
@@ -116,20 +118,26 @@ class MonitorService {
               historiesByTaskId[task.id] || []
             ))
       }));
+    } else {
+      const db = await this.store.read();
+      tasks = db.tasks
+        .sort(
+          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        )
+        .map((task) => {
+          const histories = db.histories[task.id] || [];
+          return {
+            ...this.#normalizeTaskSettings(task),
+            ...this.#buildLatestChangePayload(task, histories)
+          };
+        });
+
+      if (openid) {
+        tasks = tasks.filter(t => t.openid === openid);
+      }
     }
 
-    const db = await this.store.read();
-    return db.tasks
-      .sort(
-        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-      )
-      .map((task) => {
-        const histories = db.histories[task.id] || [];
-        return {
-          ...this.#normalizeTaskSettings(task),
-          ...this.#buildLatestChangePayload(task, histories)
-        };
-      });
+    return tasks;
   }
 
   async getTask(id) {

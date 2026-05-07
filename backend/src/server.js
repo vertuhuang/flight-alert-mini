@@ -106,7 +106,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === "/api/tasks" && req.method === "GET") {
-      const tasks = await monitorService.listTasks();
+      const openid = url.searchParams.get("openid") || "";
+      const tasks = await monitorService.listTasks(openid || undefined);
       return sendJson(res, 200, { items: tasks });
     }
 

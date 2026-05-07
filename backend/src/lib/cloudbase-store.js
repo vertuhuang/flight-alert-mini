@@ -192,10 +192,13 @@ class CloudBaseStore {
     return next;
   }
 
-  async listTasks() {
+  async listTasks(openid) {
     await this.init();
-    const res = await this.db
-      .collection(TASKS_COLLECTION)
+    let query = this.db.collection(TASKS_COLLECTION);
+    if (openid) {
+      query = query.where({ openid });
+    }
+    const res = await query
       .orderBy("updatedAt", "desc")
       .limit(1000)
       .get();

@@ -97,13 +97,15 @@
     <view class="settings-popup">
       <view class="settings-popup-title">推送渠道设置</view>
       <view class="settings-popup-desc">请前往 PushPlus 官网获取推送 Token 填入下方，关注 PushPlus 服务号即可获取实时推送。</view>
-      <t-input
-        placeholder="请输入 PushPlus Token"
-        value="{{pushplusTokenInput}}"
-        bind:change="onPushplusInputChange"
-        align="center"
-        style="margin: 0 32rpx;"
-      />
+      <view style="margin: 0 32rpx; border-bottom: 1rpx solid #e5e7eb;">
+        <input
+          placeholder="请输入 PushPlus Token"
+          value="{{pushplusTokenInput}}"
+          bindinput="onPushplusInputChange"
+          style="width: 100%; height: 80rpx; font-size: 28rpx; color: #333; text-align: center;"
+          placeholder-style="color: #bbb; text-align: center;"
+        />
+      </view>
       <view class="settings-popup-actions" style="margin: 32rpx 32rpx 0;">
         <view class="settings-popup-btn">
           <t-button theme="default" variant="outline" block bind:tap="closePushplusPopup">取消</t-button>

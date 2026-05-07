@@ -19,8 +19,19 @@ function handleResponse(resolve, reject, res) {
 }
 
 function request({ url, method = "GET", data, header = {} }) {
+  // 自动注入 openid 到请求中
+  const app = getApp();
+  const openid = app?.globalData?.openid || "";
+  if (openid) {
+    if (method === "GET") {
+      const sep = url.includes("?") ? "&" : "?";
+      url = `${url}${sep}openid=${encodeURIComponent(openid)}`;
+    } else {
+      data = { ...data, openid };
+    }
+  }
+
   return new Promise((resolve, reject) => {
-    const app = getApp();
     const { runtimeMode, apiBaseUrl, cloudEnv, cloudService } = app.globalData;
     const apiPath = normalizeApiPath(url);
 
