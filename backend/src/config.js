@@ -22,10 +22,10 @@ module.exports = {
     "https://apis.juhe.cn/flight/query",
   JUHE_FLIGHT_API_KEY:
     process.env.JUHE_FLIGHT_API_KEY || "",
-  ALPHA_VANTAGE_API_URL:
-    process.env.ALPHA_VANTAGE_API_URL || "https://www.alphavantage.co/query",
-  ALPHA_VANTAGE_API_KEY:
-    process.env.ALPHA_VANTAGE_API_KEY || "",
+  JUHE_EXCHANGE_API_URL:
+    process.env.JUHE_EXCHANGE_API_URL || "http://web.juhe.cn:8080/finance/exchange/frate",
+  JUHE_EXCHANGE_API_KEY:
+    process.env.JUHE_EXCHANGE_API_KEY || "",
   PUSHPLUS_URL: "https://www.pushplus.plus/send",
   // WeChat subscribe message config
   WX_APPID: process.env.WX_APPID || "",
