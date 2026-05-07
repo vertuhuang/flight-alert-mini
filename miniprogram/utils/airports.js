@@ -5,7 +5,7 @@
  * pinyin: 城市拼音（用于搜索和排序）
  * airports: 机场名称（供参考）
  */
-const AIRPORTS = [
+const AIRPORTS_RAW = [
   { code: "AAT", city: "阿勒泰", pinyin: "aleitai", airports: "阿勒泰雪都" },
   { code: "AKA", city: "安康", pinyin: "ankang", airports: "安康富强" },
   { code: "AQG", city: "安庆", pinyin: "anqing", airports: "安庆天柱山" },
@@ -205,15 +205,148 @@ const AIRPORTS = [
   { code: "BXP", city: "博乐", pinyin: "bole3", airports: "阿拉山口" }
 ];
 
-// Deduplicate by code, keep first occurrence
-const seen = new Set();
-const UNIQUE_AIRPORTS = [];
-for (const item of AIRPORTS) {
-  if (!seen.has(item.code)) {
-    seen.add(item.code);
-    UNIQUE_AIRPORTS.push(item);
-  }
+// Remove obviously duplicated / legacy / incorrect aliases to keep the picker clean.
+const REMOVED_CODES = new Set([
+  "HKM", // 且末，保留 IQM
+  "YIM", // 伊宁，保留 YIN
+  "XNY", // 兴义，保留 ACX
+  "NAY", // 数据误写成南阳，保留 NNY
+  "BYJ", // 博乐，保留 BPL
+  "BXP", // 博乐，保留 BPL
+  "GYU", // 固原，保留 GSN
+  "NZH", // 昭通，保留 ZAT
+  "JDM", // 景德镇，保留 JDZ
+  "SHL", // 石家庄，保留 SJW
+  "TWF", // 通辽，保留 TGO
+  "YCA", // 银川，保留 INC
+  "YZL", // 银川，保留 INC
+  "FAT", // 阜阳，保留 FUG
+  "QSH"  // 黔江，保留 JIQ
+]);
+
+// Fill common missing airports / city codes that users expect to see.
+const EXTRA_AIRPORTS = [
+  { code: "HYN", city: "台州", pinyin: "taizhou", airports: "路桥" },
+  { code: "JIU", city: "九江", pinyin: "jiujiang", airports: "庐山" },
+  { code: "KCA", city: "库车", pinyin: "kuche", airports: "龟兹" },
+  { code: "LZH", city: "柳州", pinyin: "liuzhou", airports: "白莲" },
+  { code: "KHN", city: "南昌", pinyin: "nanchang", airports: "昌北" },
+  { code: "IQN", city: "庆阳", pinyin: "qingyang", airports: "庆阳" },
+  { code: "PVG", city: "上海", pinyin: "shanghai-pudong", airports: "浦东" },
+  { code: "SZV", city: "苏州", pinyin: "suzhou", airports: "苏州" },
+  { code: "TEN", city: "铜仁", pinyin: "tongren", airports: "凤凰" },
+  { code: "HLH", city: "乌兰浩特", pinyin: "wulanhaote", airports: "义勒力特" },
+  { code: "WUX", city: "无锡", pinyin: "wuxi", airports: "硕放" },
+  { code: "XMN", city: "厦门", pinyin: "xiamen", airports: "高崎" },
+  { code: "ENY", city: "延安", pinyin: "yanan", airports: "南泥湾" },
+  { code: "CTU", city: "成都", pinyin: "chengdu", airports: "双流" },
+  { code: "TFU", city: "成都", pinyin: "chengdu-tianfu", airports: "天府" },
+  { code: "PEK", city: "北京", pinyin: "beijing-capital", airports: "首都" },
+  { code: "PKX", city: "北京", pinyin: "beijing-daxing", airports: "大兴" }
+];
+
+const AIRPORT_OVERRIDES = {
+  DAX: { airports: "金垭" },
+  JJN: { city: "泉州", airports: "晋江" },
+  LUM: { city: "德宏", airports: "芒市" },
+  SWA: { city: "揭阳", airports: "潮汕" },
+  YTY: { city: "扬州", airports: "扬州泰州" }
+};
+
+function normalizeAirport(item) {
+  const override = AIRPORT_OVERRIDES[item.code] || {};
+  return {
+    ...item,
+    ...override,
+    code: String(item.code || "").toUpperCase(),
+    city: String((override.city || item.city || "")).trim(),
+    pinyin: String(item.pinyin || "").trim().toLowerCase(),
+    airports: String((override.airports || item.airports || "")).trim()
+  };
 }
+
+// Deduplicate by code, then deduplicate exact same city/airport pairs.
+const seenCodes = new Set();
+const seenCityAirportKeys = new Set();
+const FULL_AIRPORTS = [];
+for (const item of [...AIRPORTS_RAW, ...EXTRA_AIRPORTS]) {
+  if (REMOVED_CODES.has(item.code)) continue;
+  const normalized = normalizeAirport(item);
+  if (!normalized.code || !normalized.city) continue;
+  if (seenCodes.has(normalized.code)) continue;
+
+  const cityAirportKey = `${normalized.city}::${normalized.airports}`;
+  if (normalized.airports && seenCityAirportKeys.has(cityAirportKey)) continue;
+
+  seenCodes.add(normalized.code);
+  if (normalized.airports) {
+    seenCityAirportKeys.add(cityAirportKey);
+  }
+  FULL_AIRPORTS.push(normalized);
+}
+
+const CITY_PREFERRED_CODES = {
+  北京: "BJS",
+  上海: "SHA",
+  成都: "CTU",
+  南阳: "NNY",
+  石家庄: "SJW",
+  银川: "INC",
+  黔江: "JIQ",
+  且末: "IQM",
+  伊宁: "YIN",
+  兴义: "ACX",
+  景德镇: "JDZ",
+  通辽: "TGO",
+  阜阳: "FUG",
+  固原: "GSN",
+  博乐: "BPL",
+  昭通: "ZAT"
+};
+
+function mergeAirportNames(items) {
+  const seen = new Set();
+  const merged = [];
+  for (const item of items) {
+    for (const airportName of String(item.airports || "").split("/")) {
+      const name = airportName.trim();
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      merged.push(name);
+    }
+  }
+  return merged.join("/");
+}
+
+function buildCityOptions(list) {
+  const grouped = new Map();
+
+  for (const item of list) {
+    if (!grouped.has(item.city)) {
+      grouped.set(item.city, []);
+    }
+    grouped.get(item.city).push(item);
+  }
+
+  const cities = [];
+  for (const [city, items] of grouped.entries()) {
+    const preferredCode = CITY_PREFERRED_CODES[city];
+    const representative =
+      items.find((item) => item.code === preferredCode) ||
+      items[0];
+
+    cities.push({
+      code: representative.code,
+      city,
+      pinyin: representative.pinyin,
+      airports: mergeAirportNames(items)
+    });
+  }
+
+  return cities.sort((a, b) => a.pinyin.localeCompare(b.pinyin));
+}
+
+const CITY_OPTIONS = buildCityOptions(FULL_AIRPORTS);
 
 /**
  * Get first letter of pinyin (uppercase)
@@ -253,11 +386,11 @@ function groupByLetter(list) {
  */
 function searchAirports(keyword) {
   if (!keyword || !keyword.trim()) {
-    return groupByLetter(UNIQUE_AIRPORTS);
+    return groupByLetter(CITY_OPTIONS);
   }
 
   const kw = keyword.trim().toLowerCase();
-  const matched = UNIQUE_AIRPORTS.filter((item) => {
+  const matched = CITY_OPTIONS.filter((item) => {
     return (
       item.city.toLowerCase().includes(kw) ||
       item.pinyin.includes(kw) ||
@@ -274,7 +407,10 @@ function searchAirports(keyword) {
  */
 function getCityByCode(code) {
   if (!code) return "";
-  const item = UNIQUE_AIRPORTS.find((a) => a.code === code.toUpperCase());
+  const normalizedCode = code.toUpperCase();
+  const item =
+    FULL_AIRPORTS.find((a) => a.code === normalizedCode) ||
+    CITY_OPTIONS.find((a) => a.code === normalizedCode);
   return item ? item.city : code;
 }
 
@@ -283,13 +419,16 @@ function getCityByCode(code) {
  */
 function formatAirportDisplay(code) {
   if (!code) return "";
-  const item = UNIQUE_AIRPORTS.find((a) => a.code === code.toUpperCase());
+  const normalizedCode = code.toUpperCase();
+  const item =
+    CITY_OPTIONS.find((a) => a.code === normalizedCode) ||
+    FULL_AIRPORTS.find((a) => a.code === normalizedCode);
   if (!item) return code;
   return `${item.city} (${item.code}) · ${item.airports}`;
 }
 
 module.exports = {
-  AIRPORTS: UNIQUE_AIRPORTS,
+  AIRPORTS: CITY_OPTIONS,
   groupByLetter,
   searchAirports,
   getCityByCode,

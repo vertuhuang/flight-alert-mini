@@ -128,7 +128,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (!/^[A-Za-z]{3}$/.test(from) || !/^[A-Za-z]{3}$/.test(to)) {
-        return badRequest(res, "from/to 必须是 3 位 IATA 机场代码");
+        return badRequest(res, "from/to 必须是 3 位城市代码（如 BJS, SHA）");
       }
 
       if (!/^\d{8}$/.test(date)) {
@@ -210,7 +210,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (!/^[A-Za-z]{3}$/.test(from) || !/^[A-Za-z]{3}$/.test(to)) {
-        return badRequest(res, "from/to 必须是 3 位 IATA 机场代码");
+        return badRequest(res, "from/to 必须是 3 位城市代码（如 BJS, SHA）");
       }
 
       if (!/^\d{8}$/.test(date)) {

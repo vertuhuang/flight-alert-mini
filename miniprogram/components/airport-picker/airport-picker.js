@@ -1,4 +1,9 @@
-const { searchAirports, groupByLetter, formatAirportDisplay } = require("../../utils/airports");
+const {
+  AIRPORTS,
+  searchAirports,
+  groupByLetter,
+  formatAirportDisplay
+} = require("../../utils/airports");
 
 Component({
   properties: {
@@ -38,7 +43,7 @@ Component({
 
   lifetimes: {
     attached() {
-      const groups = groupByLetter(require("../../utils/airports").AIRPORTS);
+      const groups = groupByLetter(AIRPORTS);
       const sidebarLetters = groups.map((g) => g.letter);
       this.setData({ groups, sidebarLetters });
     }
@@ -48,7 +53,7 @@ Component({
     noop() {},
 
     open() {
-      const allGroups = groupByLetter(require("../../utils/airports").AIRPORTS);
+      const allGroups = groupByLetter(AIRPORTS);
       this.setData({
         visible: true,
         keyword: "",

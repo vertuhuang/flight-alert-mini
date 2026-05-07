@@ -417,13 +417,13 @@ class MonitorService {
 
       if (!partial || input.placeFrom != null) {
         if (!/^[A-Za-z]{3}$/.test(String(input.placeFrom || "").trim())) {
-          throw new Error("出发机场代码必须是 3 位 IATA 代码");
+          throw new Error("出发城市代码必须是 3 位字母代码");
         }
       }
 
       if (!partial || input.placeTo != null) {
         if (!/^[A-Za-z]{3}$/.test(String(input.placeTo || "").trim())) {
-          throw new Error("到达机场代码必须是 3 位 IATA 代码");
+          throw new Error("到达城市代码必须是 3 位字母代码");
         }
       }
 
