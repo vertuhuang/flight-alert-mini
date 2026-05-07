@@ -6,9 +6,7 @@
         <t-icon name="setting" size="22px" color="#666666" />
       </view>
       <view class="navbar-title">价格监控</view>
-      <view class="navbar-right" bindtap="goEvents">
-        <t-icon name="notification" size="22px" color="#666666" />
-      </view>
+      <view class="navbar-right"></view>
     </view>
   </view>
 

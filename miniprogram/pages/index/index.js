@@ -88,86 +88,98 @@ Page({
   },
 
   async loadData() {
-    this.setData({ loading: true });
+    this.setData({ loading: true, healthText: "服务启动中..." });
 
-    try {
-      const [health, tasksRes, userSettings] = await Promise.all([
-        request({ url: "/health" }),
-        request({ url: "/tasks" }),
-        getUserSettings().catch(() => null)
-      ]);
+    const maxRetries = 2;
+    let lastError = null;
 
-      const now = new Date();
-      const todayStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const [health, tasksRes, userSettings] = await Promise.all([
+          request({ url: "/health" }).catch(() => null),
+          request({ url: "/tasks" }),
+          getUserSettings().catch(() => null)
+        ]);
 
-      const tasks = (tasksRes.items || []).map((task) => {
-        let isExpired = false;
-        if (task.monitorType !== "exchange_rate" && task.departDates && task.departDates.length) {
-          const maxDepartDate = Math.max(...task.departDates.map((d) => Number(d)));
-          isExpired = maxDepartDate < Number(todayStr);
-        }
+        const now = new Date();
+        const todayStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
 
-        let latestChangeInfo = null;
-        if (task.latestChange) {
-          latestChangeInfo = {
-            timeStr: formatMonthDayTime(task.latestChange.checkedAt),
-            type: task.latestChange.type,
-            delta: Math.abs(task.latestChange.delta)
+        const tasks = (tasksRes.items || []).map((task) => {
+          let isExpired = false;
+          if (task.monitorType !== "exchange_rate" && task.departDates && task.departDates.length) {
+            const maxDepartDate = Math.max(...task.departDates.map((d) => Number(d)));
+            isExpired = maxDepartDate < Number(todayStr);
+          }
+
+          let latestChangeInfo = null;
+          if (task.latestChange) {
+            latestChangeInfo = {
+              timeStr: formatMonthDayTime(task.latestChange.checkedAt),
+              type: task.latestChange.type,
+              delta: Math.abs(task.latestChange.delta)
+            };
+          }
+
+          let currentPrice = task.latestSummary?.minPrice;
+          if (currentPrice == null && task.latestChange?.currentPrice != null) {
+            currentPrice = task.latestChange.currentPrice;
+          }
+
+          const priceText = currentPrice != null
+            ? (task.monitorType === "exchange_rate" ? currentPrice.toFixed(4) : String(currentPrice))
+            : null;
+          const deltaText = latestChangeInfo
+            ? (task.monitorType === "exchange_rate" ? latestChangeInfo.delta.toFixed(4) : `${latestChangeInfo.delta}元`)
+            : null;
+          const routeText = task.monitorType === "exchange_rate"
+            ? `${getCurrencyName(task.baseCurrency)} / ${getCurrencyName(task.quoteCurrency)}`
+            : `${getCityByCode(task.placeFrom) || task.placeFrom} / ${getCityByCode(task.placeTo) || task.placeTo}`;
+
+          return {
+            ...task,
+            isExpired,
+            currentPrice,
+            priceText,
+            deltaText,
+            routeText,
+            departDatesText: joinDates(task.departDates),
+            latestChangeInfo,
+            lastCheckedText: formatDateTime(task.lastCheckedAt),
+            nextCheckText: formatDateTime(task.nextCheckAt)
           };
-        }
+        });
 
-        let currentPrice = task.latestSummary?.minPrice;
-        if (currentPrice == null && task.latestChange?.currentPrice != null) {
-          currentPrice = task.latestChange.currentPrice;
-        }
-
-        const priceText = currentPrice != null
-          ? (task.monitorType === "exchange_rate" ? currentPrice.toFixed(4) : String(currentPrice))
-          : null;
-        const deltaText = latestChangeInfo
-          ? (task.monitorType === "exchange_rate" ? latestChangeInfo.delta.toFixed(4) : `${latestChangeInfo.delta}元`)
-          : null;
-        const routeText = task.monitorType === "exchange_rate"
-          ? `${getCurrencyName(task.baseCurrency)} / ${getCurrencyName(task.quoteCurrency)}`
-          : `${getCityByCode(task.placeFrom) || task.placeFrom} / ${getCityByCode(task.placeTo) || task.placeTo}`;
-
-        return {
-          ...task,
-          isExpired,
-          currentPrice,
-          priceText,
-          deltaText,
-          routeText,
-          departDatesText: joinDates(task.departDates),
-          latestChangeInfo,
-          lastCheckedText: formatDateTime(task.lastCheckedAt),
-          nextCheckText: formatDateTime(task.nextCheckAt)
+        const nextUserSettings = userSettings || {
+          pushplusToken: "",
+          silentStart: DEFAULT_SILENT_START,
+          silentEnd: DEFAULT_SILENT_END
         };
-      });
 
-      const nextUserSettings = userSettings || {
-        pushplusToken: "",
-        silentStart: DEFAULT_SILENT_START,
-        silentEnd: DEFAULT_SILENT_END
-      };
+        this.setData({
+          tasks,
+          healthText: health ? `服务在线 ${formatDateTime(health.now)}` : "服务已连接",
+          userSettings: nextUserSettings,
+          pushplusTokenInput: nextUserSettings.pushplusToken || "",
+          silentRangeText: formatSilentRange(nextUserSettings),
+          silentDraftStart: nextUserSettings.silentStart,
+          silentDraftEnd: nextUserSettings.silentEnd
+        });
 
-      this.setData({
-        tasks,
-        healthText: `服务在线 ${formatDateTime(health.now)}`,
-        userSettings: nextUserSettings,
-        pushplusTokenInput: nextUserSettings.pushplusToken || "",
-        silentRangeText: formatSilentRange(nextUserSettings),
-        silentDraftStart: nextUserSettings.silentStart,
-        silentDraftEnd: nextUserSettings.silentEnd
-      });
-    } catch (error) {
-      wx.showToast({
-        title: error.message || "加载失败",
-        icon: "none"
-      });
-    } finally {
-      this.setData({ loading: false });
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
     }
+
+    if (lastError) {
+      console.warn("加载数据失败:", lastError);
+    }
+
+    this.setData({ loading: false });
   },
 
   openSettings() {

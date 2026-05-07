@@ -158,7 +158,7 @@ cloudService: "flight-alert-api"
 |--------|------|
 | `STORE_DRIVER` | 数据存储驱动，`cloudbase` 使用云开发数据库 |
 | `CLOUDBASE_ENV_ID` | 云开发环境 ID |
-| `ALPHA_VANTAGE_API_KEY` | Alpha Vantage 汇率接口 Key |
+| `JUHE_EXCHANGE_API_KEY` | 聚合数据汇率接口 Key |
 | `WX_APPID` | 微信小程序 AppID：`wx0b7eb053d1adfda8` |
 | `WX_APPSECRET` | 微信小程序 AppSecret |
 | `SUBSCRIBE_TEMPLATE_ID` | 微信订阅消息模板 ID：`9sSdwh_lZfkNgQPzpcwD4bNbofTq0RIrnTU9LeLmrEM` |

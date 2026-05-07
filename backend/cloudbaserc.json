@@ -1,6 +1,14 @@
 {
   "envId": "cloud1-d3gu5h3dk5e16d52b",
   "cloudrun": {
-    "name": "flight-alert-api"
+    "name": "flight-alert-api",
+    "envVariables": {
+      "JUHE_EXCHANGE_API_KEY": "11c8142e6f9d8e0c917011d23e4f0036",
+      "STORE_DRIVER": "cloudbase",
+      "CLOUDBASE_ENV_ID": "cloud1-d3gu5h3dk5e16d52b",
+      "TASKS_COLLECTION": "flight_alert_tasks",
+      "HISTORIES_COLLECTION": "flight_alert_histories",
+      "EVENTS_COLLECTION": "flight_alert_events"
+    }
   }
 }
