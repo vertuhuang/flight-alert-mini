@@ -62,3 +62,34 @@
   overflow: hidden;
   border-radius: 0 0 24rpx 24rpx;
 }
+
+/* 底部弹出设置抽屉（与 index 页保持一致） */
+.settings-popup {
+  padding: 40rpx 0 48rpx;
+  background: #ffffff;
+  border-top-left-radius: 32rpx;
+  border-top-right-radius: 32rpx;
+}
+
+.settings-popup-title {
+  margin: 0 32rpx;
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.settings-popup-desc {
+  margin: 12rpx 32rpx 24rpx;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: #888888;
+}
+
+.settings-popup-actions {
+  display: flex;
+  gap: 32rpx;
+}
+
+.settings-popup-btn {
+  flex: 1;
+}

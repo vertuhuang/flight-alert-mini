@@ -252,6 +252,32 @@ class MonitorService {
     return this.#normalizeUserSettings(normalizedOpenid, user);
   }
 
+  /**
+   * 确保用户在数据库中有记录，若不存在则创建默认记录。
+   * 登录时调用，保证任何用户首次登录即写入 users 表。
+   */
+  async ensureUser(openid) {
+    const normalizedOpenid = String(openid || "").trim();
+    if (!normalizedOpenid) return;
+
+    const existing =
+      typeof this.store.getUserByOpenid === "function"
+        ? await this.store.getUserByOpenid(normalizedOpenid)
+        : ((await this.store.read()).users || []).find((item) => item.openid === normalizedOpenid) || null;
+
+    if (existing) return; // 已存在，无需创建
+
+    const newUser = this.#normalizeUserSettings(normalizedOpenid, null);
+    if (typeof this.store.writeUser === "function") {
+      await this.store.writeUser(newUser);
+    } else {
+      await this.store.update((db) => ({
+        ...db,
+        users: [newUser, ...(db.users || [])]
+      }));
+    }
+  }
+
   async updateUserSettings(input) {
     const openid = String(input.openid || "").trim();
     if (!openid) {

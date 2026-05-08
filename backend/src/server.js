@@ -81,8 +81,17 @@ const server = http.createServer(async (req, res) => {
           return badRequest(res, `微信登录失败: ${wxData.errmsg || wxData.errcode}`);
         }
 
+        const openid = wxData.openid || "";
+
+        // 登录成功后立即确保 users 表中有该用户的记录
+        if (openid) {
+          monitorService.ensureUser(openid).catch((err) => {
+            console.warn("ensureUser 失败（不影响登录）:", err);
+          });
+        }
+
         return sendJson(res, 200, {
-          openid: wxData.openid || "",
+          openid,
           session_key: wxData.session_key || ""
         });
       } catch (error) {
