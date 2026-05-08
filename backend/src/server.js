@@ -83,11 +83,14 @@ const server = http.createServer(async (req, res) => {
 
         const openid = wxData.openid || "";
 
-        // 登录成功后立即确保 users 表中有该用户的记录
+        // 登录成功后立即确保 users 表中有该用户的记录（同步等待完成）
         if (openid) {
-          monitorService.ensureUser(openid).catch((err) => {
+          try {
+            await monitorService.ensureUser(openid);
+            console.log(`ensureUser 成功: ${openid.slice(0, 8)}...`);
+          } catch (err) {
             console.warn("ensureUser 失败（不影响登录）:", err);
-          });
+          }
         }
 
         return sendJson(res, 200, {
@@ -116,7 +119,11 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === "/api/tasks" && req.method === "GET") {
       const openid = url.searchParams.get("openid") || "";
-      const tasks = await monitorService.listTasks(openid || undefined);
+      if (!openid) {
+        // 未登录用户返回空列表，避免泄露其他用户数据
+        return sendJson(res, 200, { items: [] });
+      }
+      const tasks = await monitorService.listTasks(openid);
       return sendJson(res, 200, { items: tasks });
     }
 

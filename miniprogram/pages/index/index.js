@@ -2,6 +2,7 @@ const { request } = require("../../utils/request");
 const { formatDateTime, formatMonthDayTime, joinDates } = require("../../utils/format");
 const { getCityByCode } = require("../../utils/airports");
 const { getCurrencyName } = require("../../utils/currencies");
+const { ensureOpenid } = require("../../utils/subscribe");
 const {
   DEFAULT_SILENT_END,
   DEFAULT_SILENT_START,
@@ -88,6 +89,9 @@ Page({
   },
 
   async loadData() {
+    // 确保 openid 已就绪，避免竞态导致请求不带 openid 泄露全部数据
+    await ensureOpenid();
+
     this.setData({ loading: true, healthText: "服务启动中..." });
 
     const maxRetries = 2;
