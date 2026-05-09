@@ -48,7 +48,8 @@ Page({
     showTimePicker: false,
     createTypeItems: [
       { label: "机票价格监控" },
-      { label: "汇率监控" }
+      { label: "汇率监控" },
+      { label: "金价监控" }
     ],
     settingsItems: SETTINGS_ITEMS,
     selectedTaskId: "",
@@ -110,7 +111,7 @@ Page({
 
         const tasks = (tasksRes.items || []).map((task) => {
           let isExpired = false;
-          if (task.monitorType !== "exchange_rate" && task.departDates && task.departDates.length) {
+          if (task.monitorType === "flight" && task.departDates && task.departDates.length) {
             const maxDepartDate = Math.max(...task.departDates.map((d) => Number(d)));
             isExpired = maxDepartDate < Number(todayStr);
           }
@@ -130,13 +131,19 @@ Page({
           }
 
           const priceText = currentPrice != null
-            ? (task.monitorType === "exchange_rate" ? currentPrice.toFixed(4) : String(currentPrice))
+            ? (task.monitorType === "exchange_rate" ? currentPrice.toFixed(4)
+                : task.monitorType === "gold" ? currentPrice.toFixed(2) + " 元/克"
+                : String(currentPrice))
             : null;
           const deltaText = latestChangeInfo
-            ? (task.monitorType === "exchange_rate" ? latestChangeInfo.delta.toFixed(4) : `${latestChangeInfo.delta}元`)
+            ? (task.monitorType === "exchange_rate" ? latestChangeInfo.delta.toFixed(4)
+                : task.monitorType === "gold" ? latestChangeInfo.delta.toFixed(2) + " 元/克"
+                : `${latestChangeInfo.delta}元`)
             : null;
           const routeText = task.monitorType === "exchange_rate"
             ? `${getCurrencyName(task.baseCurrency)} / ${getCurrencyName(task.quoteCurrency)}`
+            : task.monitorType === "gold"
+            ? "上海金"
             : `${getCityByCode(task.placeFrom) || task.placeFrom} / ${getCityByCode(task.placeTo) || task.placeTo}`;
 
           return {
@@ -316,7 +323,7 @@ Page({
   onCreateTypeSelect(event) {
     const index = event.detail.index;
     this.setData({ showCreateSheet: false });
-    const params = index === 1 ? "?monitorType=exchange_rate" : "";
+    const params = index === 1 ? "?monitorType=exchange_rate" : index === 2 ? "?monitorType=gold" : "";
     wx.navigateTo({
       url: `/pages/task-form/task-form${params}`
     });

@@ -4,6 +4,7 @@ const { HOST, PORT, STORE_DRIVER, WX_APPID, WX_APPSECRET } = require("./config")
 const { CloudBaseStore } = require("./lib/cloudbase-store");
 const { CtripProvider } = require("./lib/ctrip-provider");
 const { JuheExchangeProvider } = require("./lib/juhe-exchange-provider");
+const { JuheGoldProvider } = require("./lib/juhe-gold-provider");
 const { MonitorService } = require("./lib/monitor-service");
 const { PushPlusNotifier } = require("./lib/pushplus-notifier");
 const { WxSubscribeNotifier } = require("./lib/wx-subscribe-notifier");
@@ -18,10 +19,12 @@ const wxSubscribeNotifier = new WxSubscribeNotifier();
 // Composite provider: routes to the appropriate provider based on task type
 const flightProvider = new CtripProvider();
 const exchangeProvider = new JuheExchangeProvider();
+const goldProvider = new JuheGoldProvider();
 const provider = {
   fetchPrices(task) {
     const type = task.monitorType || "flight";
     if (type === "exchange_rate") return exchangeProvider.fetchPrices(task);
+    if (type === "gold") return goldProvider.fetchPrices(task);
     return flightProvider.fetchPrices(task);
   }
 };

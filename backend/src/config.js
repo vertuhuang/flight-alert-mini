@@ -26,6 +26,10 @@ module.exports = {
     process.env.JUHE_EXCHANGE_API_URL || "http://web.juhe.cn:8080/finance/exchange/frate",
   JUHE_EXCHANGE_API_KEY:
     process.env.JUHE_EXCHANGE_API_KEY || "",
+  JUHE_GOLD_API_URL:
+    process.env.JUHE_GOLD_API_URL || "http://web.juhe.cn:8080/finance/gold/shgold",
+  JUHE_GOLD_API_KEY:
+    process.env.JUHE_GOLD_API_KEY || "403b0d06eb908e6795fa2f282a24a2d3",
   PUSHPLUS_URL: "https://www.pushplus.plus/send",
   // WeChat subscribe message config
   WX_APPID: process.env.WX_APPID || "",
@@ -37,5 +41,7 @@ module.exports = {
   DEFAULT_THRESHOLD: 50,
   SCHEDULER_TICK_MS: 15000,
   EXCHANGE_DEFAULT_CHECK_INTERVAL_SEC: 300,
-  EXCHANGE_DEFAULT_THRESHOLD: 0.01
+  EXCHANGE_DEFAULT_THRESHOLD: 0.01,
+  GOLD_DEFAULT_CHECK_INTERVAL_SEC: 300,
+  GOLD_DEFAULT_THRESHOLD: 1
 };

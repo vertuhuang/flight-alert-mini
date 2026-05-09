@@ -11,3 +11,6 @@ backend/.env*
 .workbuddy/
 *.zip
 
+
+# Deploy test scripts
+backend/deploy-*.js

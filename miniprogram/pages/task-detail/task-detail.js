@@ -13,6 +13,7 @@ Page({
     task: null,
     history: [],
     isFx: false,
+    isGold: false,
     showDeleteDialog: false,
     showActionSheet: false,
     actionItems: [],
@@ -51,6 +52,7 @@ Page({
       }
 
       const isFx = task.monitorType === "exchange_rate";
+      const isGold = task.monitorType === "gold";
       const sortedHistory = [...(historyRes?.items || [])].sort((a, b) => {
         return new Date(b.checkedAt).getTime() - new Date(a.checkedAt).getTime();
       });
@@ -80,10 +82,14 @@ Page({
 
           // 预格式化用于显示的文本
           const priceText = currentMinPrice != null
-            ? (isFx ? currentMinPrice.toFixed(4) : currentMinPrice + " 元")
+            ? (isFx ? currentMinPrice.toFixed(4)
+                : isGold ? currentMinPrice.toFixed(2) + " 元/克"
+                : currentMinPrice + " 元")
             : null;
           const deltaText = changes.length > 0
-            ? (isFx ? changes[0].deltaAbs.toFixed(4) : changes[0].deltaAbs + "元")
+            ? (isFx ? changes[0].deltaAbs.toFixed(4)
+                : isGold ? changes[0].deltaAbs.toFixed(2) + " 元/克"
+                : changes[0].deltaAbs + "元")
             : null;
 
           return {
@@ -105,6 +111,13 @@ Page({
         placeToText = quoteName;
         departDatesText = "实时";
         returnDatesText = "";
+      } else if (isGold) {
+        const variety = task.latestSnapshot?.variety || "黄金";
+        headerTitle = `${variety} 金价监控`;
+        placeFromText = "上海金";
+        placeToText = variety;
+        departDatesText = "实时";
+        returnDatesText = "";
       } else {
         const fromCity = getCityByCode(task.placeFrom) || task.placeFrom;
         const toCity = getCityByCode(task.placeTo) || task.placeTo;
@@ -118,7 +131,7 @@ Page({
 
       // 计算是否过期（仅机票任务）
       let isExpired = false;
-      if (!isFx && task.departDates && task.departDates.length) {
+      if (!isFx && !isGold && task.departDates && task.departDates.length) {
         const now = new Date();
         const todayStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
         const maxDepartDate = Math.max(...task.departDates.map(d => Number(d)));
@@ -141,11 +154,14 @@ Page({
       // 优先用 latestSummary，如果没有则从 latestChange 兜底（防止空查询覆盖数据）
       const currentMinPrice = task.latestSummary?.minPrice ?? task.latestChange?.currentPrice;
       const currentPriceText = currentMinPrice != null
-        ? (isFx ? currentMinPrice.toFixed(4) : String(currentMinPrice))
+        ? (isFx ? currentMinPrice.toFixed(4)
+            : isGold ? currentMinPrice.toFixed(2) + " 元/克"
+            : String(currentMinPrice))
         : null;
 
       this.setData({
         isFx,
+        isGold,
         task: {
           ...task,
           pushplusEnabled: task.pushplusEnabled == null ? !!task.pushplusToken : task.pushplusEnabled,

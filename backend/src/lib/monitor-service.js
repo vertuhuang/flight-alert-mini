@@ -3,7 +3,9 @@ const {
   DEFAULT_THRESHOLD,
   SCHEDULER_TICK_MS,
   EXCHANGE_DEFAULT_CHECK_INTERVAL_SEC,
-  EXCHANGE_DEFAULT_THRESHOLD
+  EXCHANGE_DEFAULT_THRESHOLD,
+  GOLD_DEFAULT_CHECK_INTERVAL_SEC,
+  GOLD_DEFAULT_THRESHOLD
 } = require("../config");
 const {
   buildSummaryFromSnapshot,
@@ -387,19 +389,23 @@ class MonitorService {
     const monitorType = this.#resolveMonitorType(input);
     const threshold = Number(
       input.threshold == null
-        ? (monitorType === "exchange_rate" ? EXCHANGE_DEFAULT_THRESHOLD : DEFAULT_THRESHOLD)
+        ? (monitorType === "exchange_rate" ? EXCHANGE_DEFAULT_THRESHOLD
+            : monitorType === "gold" ? GOLD_DEFAULT_THRESHOLD
+            : DEFAULT_THRESHOLD)
         : input.threshold
     );
     const checkIntervalSec = Number(
       input.checkIntervalSec == null
-        ? (monitorType === "exchange_rate" ? EXCHANGE_DEFAULT_CHECK_INTERVAL_SEC : DEFAULT_CHECK_INTERVAL_SEC)
+        ? (monitorType === "exchange_rate" ? EXCHANGE_DEFAULT_CHECK_INTERVAL_SEC
+            : monitorType === "gold" ? GOLD_DEFAULT_CHECK_INTERVAL_SEC
+            : DEFAULT_CHECK_INTERVAL_SEC)
         : input.checkIntervalSec
     );
     const targetPrice = input.targetPrice == null ? null : Number(input.targetPrice);
     const notifyOnDrop = input.notifyOnDrop == null ? true : Boolean(input.notifyOnDrop);
 
-    if (!["flight", "exchange_rate"].includes(monitorType)) {
-      throw new Error("monitorType 仅支持 flight 或 exchange_rate");
+    if (!["flight", "exchange_rate", "gold"].includes(monitorType)) {
+      throw new Error("monitorType 仅支持 flight、exchange_rate 或 gold");
     }
 
     if (!partial || input.name != null) {
@@ -435,6 +441,8 @@ class MonitorService {
           throw new Error("基础货币和报价货币不能相同");
         }
       }
+    } else if (monitorType === "gold") {
+      // 金价监控无需额外字段校验
     } else {
       // 机票监控校验
       const flightWay = input.flightWay || "Oneway";
@@ -504,6 +512,8 @@ class MonitorService {
     if (monitorType === "exchange_rate") {
       result.baseCurrency = String(input.baseCurrency || "").trim().toUpperCase();
       result.quoteCurrency = String(input.quoteCurrency || "").trim().toUpperCase();
+    } else if (monitorType === "gold") {
+      result.goldVarietyKey = String(input.goldVarietyKey || "4").trim();
     } else {
       result.placeFrom = String(input.placeFrom || "").trim().toUpperCase();
       result.placeTo = String(input.placeTo || "").trim().toUpperCase();
@@ -516,7 +526,7 @@ class MonitorService {
   }
 
   #resolveMonitorType(input = {}) {
-    if (input.monitorType === "flight" || input.monitorType === "exchange_rate") {
+    if (input.monitorType === "flight" || input.monitorType === "exchange_rate" || input.monitorType === "gold") {
       return input.monitorType;
     }
 
@@ -631,6 +641,11 @@ class MonitorService {
         const rate = summary?.minPrice != null ? summary.minPrice.toFixed(4) : "暂无";
         title = `🔔 ${pair} 汇率监控已启动`;
         content = `监控货币对：${pair}\n当前汇率：${rate}\n变动阈值：${normalizedTask.threshold}\n检查间隔：${normalizedTask.checkIntervalSec}秒`;
+      } else if (normalizedTask.monitorType === "gold") {
+        const variety = normalizedTask.latestSnapshot?.variety || "黄金";
+        const price = summary?.minPrice != null ? summary.minPrice.toFixed(2) : "暂无";
+        title = `🔔 ${variety} 金价监控已启动`;
+        content = `品种：${variety}\n当前价格：${price} 元/克\n变动阈值：${normalizedTask.threshold} 元/克\n检查间隔：${normalizedTask.checkIntervalSec}秒`;
       } else {
         const fromCity = getCityByCode(normalizedTask.placeFrom);
         const toCity = getCityByCode(normalizedTask.placeTo);
@@ -651,6 +666,31 @@ class MonitorService {
       }
 
       // 微信订阅消息是一次性额度。创建任务时不消耗它，保留给真正的变价通知。
+
+      // 记录初始检查历史（金价每次检查都记历史，其他类型在 checkTask 中处理）
+      if (snapshot.monitorType === "gold") {
+        const checkedAt = isoNow();
+        const historyRecord = {
+          id: createId("history"),
+          taskId: task.id,
+          checkedAt,
+          summary,
+          changes: [{ type: "initial", key: "gold_price", label: snapshot.variety || "黄金", previous: null, current: snapshot.price, delta: null }],
+          snapshot
+        };
+
+        if (typeof this.store.appendHistory === "function") {
+          await this.store.appendHistory(task.id, historyRecord, { limit: HISTORY_RETENTION_LIMIT });
+        } else {
+          await this.store.update((nextDb) => ({
+            ...nextDb,
+            histories: {
+              ...nextDb.histories,
+              [task.id]: [historyRecord, ...(nextDb.histories[task.id] || [])].slice(0, HISTORY_RETENTION_LIMIT)
+            }
+          }));
+        }
+      }
 
       if (typeof this.store.writeTask === "function") {
         await this.store.writeTask(updatedTask);
@@ -788,8 +828,9 @@ class MonitorService {
    */
   #isTaskExpired(task) {
     if (!task) return false;
-    // 汇率监控永不过期
+    // 汇率监控和金价监控永不过期
     if (task.monitorType === "exchange_rate") return false;
+    if (task.monitorType === "gold") return false;
     if (!task.departDates || !task.departDates.length) {
       return false;
     }
@@ -891,8 +932,8 @@ class MonitorService {
         updatedAt: checkedAt
       };
 
-      // 仅当价格发生变化（或有初始基准）时才记录历史
-      const shouldLogHistory = changes.length > 0;
+      // 仅当有变化时记录历史；但金价任务每次检查都记历史（用于展示走势图）
+      const shouldLogHistory = changes.length > 0 || snapshot.monitorType === "gold";
 
       // Filter changes for notification based on strategy
       const notifyChanges = changes.filter((change) => {
@@ -926,6 +967,15 @@ class MonitorService {
           const deltaAbs = Math.abs(firstChange.delta).toFixed(4);
           title = `${trendEmoji} ${pair} 汇率${trend} ${deltaAbs}`;
           content = `${pair} 当前汇率 ${currentRate}\n较上次${isDrop ? "下跌" : "上涨"} ${deltaAbs}\n变动幅度 ${((deltaAbs / currentRate) * 100).toFixed(2)}%`;
+        } else if (normalizedTask.monitorType === "gold") {
+          const variety = normalizedTask.latestSnapshot?.variety || "黄金";
+          const trend = isDrop ? "下跌" : "上涨";
+          const trendEmoji = isDrop ? "📉" : "📈";
+          const currentPrice = summary?.minPrice != null ? summary.minPrice.toFixed(2) : firstChange.current;
+          const deltaAbs = Math.abs(firstChange.delta).toFixed(2);
+          const limit = normalizedTask.latestSnapshot?.limit || "0%";
+          title = `${trendEmoji} ${variety} 金价${trend} ${deltaAbs} 元/克`;
+          content = `${variety} 当前价格 ${currentPrice} 元/克\n较上次${isDrop ? "下跌" : "上涨"} ${deltaAbs} 元/克\n今日涨跌幅 ${limit}`;
         } else {
           const fromCity = getCityByCode(normalizedTask.placeFrom);
           const toCity = getCityByCode(normalizedTask.placeTo);
@@ -943,8 +993,8 @@ class MonitorService {
         notifyResults.push({ channel: "pushplus", result });
       }
 
-      // 微信订阅消息通知（检查配额）
-      if (notifyChanges.length > 0 && normalizedTask.openid && normalizedTask.subscribeEnabled && normalizedTask.subscribeQuota > 0 && this.wxSubscribeNotifier) {
+      // 微信订阅消息通知（检查配额）；gold 类型暂不支持订阅消息
+      if (notifyChanges.length > 0 && normalizedTask.openid && normalizedTask.subscribeEnabled && normalizedTask.subscribeQuota > 0 && this.wxSubscribeNotifier && normalizedTask.monitorType !== "gold") {
         const { WxSubscribeNotifier } = require("./wx-subscribe-notifier");
         let subscribeData;
         if (normalizedTask.monitorType === "exchange_rate") {
@@ -1089,10 +1139,12 @@ class MonitorService {
   }
 
   #buildBaseline(snapshot) {
-    // 汇率任务：用固定 key（base_quote），不依赖日期
-    if (snapshot.monitorType === "exchange_rate") {
-      const key = `${snapshot.base}_${snapshot.quote}`;
-      return { [key]: snapshot.rate };
+    // 汇率任务：金价任务都用固定 key，不依赖日期
+    if (snapshot.monitorType === "exchange_rate" || snapshot.monitorType === "gold") {
+      const key = snapshot.monitorType === "gold"
+        ? "gold_price"
+        : `${snapshot.base}_${snapshot.quote}`;
+      return { [key]: snapshot.monitorType === "gold" ? snapshot.price : snapshot.rate };
     }
 
     if (snapshot.flightWay === "Roundtrip") {
@@ -1118,10 +1170,12 @@ class MonitorService {
     
     const changes = [];
 
-    // 汇率任务：用固定 key（base_quote）比较，避免日期变化导致永远是 initial
-    if (snapshot.monitorType === "exchange_rate") {
-      const key = `${snapshot.base}_${snapshot.quote}`;
-      const current = snapshot.rate;
+    // 汇率任务：金价任务都用固定 key 比较，避免日期变化导致永远是 initial
+    if (snapshot.monitorType === "exchange_rate" || snapshot.monitorType === "gold") {
+      const key = snapshot.monitorType === "gold"
+        ? "gold_price"
+        : `${snapshot.base}_${snapshot.quote}`;
+      const current = snapshot.monitorType === "gold" ? snapshot.price : snapshot.rate;
       let previous = baseline[key];
 
       // 兼容旧数据：baseline 里可能存的是日期 key，尝试取其中任一值作为 previous
@@ -1136,7 +1190,7 @@ class MonitorService {
         changes.push({
           type: "initial",
           key,
-          label: `${snapshot.base}/${snapshot.quote}`,
+          label: snapshot.monitorType === "gold" ? (snapshot.variety || "黄金") : `${snapshot.base}/${snapshot.quote}`,
           previous: null,
           current,
           delta: null
@@ -1150,7 +1204,7 @@ class MonitorService {
           changes.push({
             type: delta > 0 ? "rise" : "drop",
             key,
-            label: `${snapshot.base}/${snapshot.quote}`,
+            label: snapshot.monitorType === "gold" ? (snapshot.variety || "黄金") : `${snapshot.base}/${snapshot.quote}`,
             previous,
             current,
             delta,
@@ -1246,9 +1300,9 @@ class MonitorService {
   #extractSnapshotKeys(snapshot) {
     const keys = [];
 
-    // 汇率任务：用固定 key
-    if (snapshot.monitorType === "exchange_rate") {
-      keys.push(`${snapshot.base}_${snapshot.quote}`);
+    // 汇率任务：金价任务都用固定 key
+    if (snapshot.monitorType === "exchange_rate" || snapshot.monitorType === "gold") {
+      keys.push(snapshot.monitorType === "gold" ? "gold_price" : `${snapshot.base}_${snapshot.quote}`);
       return keys;
     }
 
@@ -1613,6 +1667,11 @@ class MonitorService {
   #isDuplicateHistoryRecord(record, histories = []) {
     const latest = histories[0];
     if (!latest) {
+      return false;
+    }
+
+    // 金价任务每次检查都记历史，不做去重
+    if (record.snapshot?.monitorType === "gold") {
       return false;
     }
 

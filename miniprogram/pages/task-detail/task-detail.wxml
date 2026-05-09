@@ -12,13 +12,11 @@
 
     <!-- Price / Rate -->
     <view wx:if="{{task.currentPriceText != null}}" style="margin-top: 12rpx; display: flex; align-items: baseline; gap: 12rpx;">
-      <text wx:if="{{isFx}}" style="font-size: 24rpx; color: #888888;">当前汇率</text>
-      <text wx:else style="font-size: 24rpx; color: #888888;">当前最低价</text>
+      <text style="font-size: 24rpx; color: #888888;">{{isFx ? '当前汇率' : isGold ? '当前金价' : '当前最低价'}}</text>
       <text class="price-highlight">{{task.currentPriceText}}</text>
-      <text wx:if="{{!isFx}}" style="font-size: 24rpx; color: #888888;">元</text>
     </view>
     <view wx:else style="margin-top: 12rpx; display: flex; align-items: baseline; gap: 12rpx;">
-      <text style="font-size: 24rpx; color: #888888;">当前{{isFx ? '汇率' : '最低价'}}</text>
+      <text style="font-size: 24rpx; color: #888888;">当前{{isFx ? '汇率' : isGold ? '金价' : '最低价'}}</text>
       <text class="muted">暂无数据</text>
     </view>
   </view>
@@ -33,6 +31,17 @@
         <view class="detail-row">
           <text class="detail-label">变动阈值</text>
           <text class="detail-value">{{task.threshold}}</text>
+        </view>
+      </block>
+      <!-- 金价任务信息 -->
+      <block wx:elif="{{isGold}}">
+        <view class="detail-row">
+          <text class="detail-label">品种</text>
+          <text class="detail-value">{{task.latestSnapshot?.variety || '上海金'}}</text>
+        </view>
+        <view class="detail-row">
+          <text class="detail-label">变动阈值</text>
+          <text class="detail-value">{{task.threshold}} 元/克</text>
         </view>
       </block>
       <!-- 机票任务信息 -->
@@ -56,7 +65,7 @@
       </block>
       <view wx:if="{{task.targetPrice}}" class="detail-row">
         <text class="detail-label">目标{{isFx ? '汇率' : '价格'}}</text>
-        <text class="detail-value">{{task.targetPrice}}</text>
+        <text class="detail-value">{{task.targetPrice}}{{isGold ? ' 元/克' : ' 元'}}</text>
       </view>
       <view class="detail-row">
         <text class="detail-label">通知策略</text>

@@ -21,6 +21,7 @@
           <view style="display: flex; align-items: center; gap: 12rpx;">
             <view style="font-size: 32rpx; font-weight: 700; color: #0f172a;">{{item.routeText}}</view>
             <t-tag wx:if="{{item.monitorType === 'exchange_rate'}}" theme="default" variant="outline" size="small" style="flex-shrink: 0; color: #aaa;">汇率</t-tag>
+            <t-tag wx:elif="{{item.monitorType === 'gold'}}" theme="default" variant="outline" size="small" style="flex-shrink: 0; color: #aaa;">金价</t-tag>
             <t-tag wx:else theme="default" variant="outline" size="small" style="flex-shrink: 0; color: #aaa;">机票</t-tag>
             <t-tag wx:if="{{!item.active && !item.isExpired}}" theme="default" variant="light" size="small" style="flex-shrink: 0;">已暂停</t-tag>
             <t-tag wx:if="{{item.isExpired}}" theme="warning" variant="light" size="small" style="flex-shrink: 0;">已过期</t-tag>
@@ -28,6 +29,7 @@
           <view style="display: flex; align-items: center; gap: 12rpx;">
             <view wx:if="{{item.currentPrice != null}}" style="display: flex; align-items: baseline; gap: 4rpx;">
               <text wx:if="{{item.monitorType === 'exchange_rate'}}" style="font-size: 24rpx; color: #888888;">当前汇率</text>
+              <text wx:elif="{{item.monitorType === 'gold'}}" style="font-size: 24rpx; color: #888888;">当前金价</text>
               <text wx:else style="font-size: 24rpx; color: #888888;">当前最低价</text>
               <text style="font-size: 32rpx; font-weight: 700; color: #0f172a;">{{item.priceText}}</text>
             </view>
@@ -39,6 +41,7 @@
         <view style="margin-top: 8rpx; display: flex; align-items: center; justify-content: space-between;">
           <view style="font-size: 24rpx; color: #888888;">
             <text wx:if="{{item.monitorType === 'exchange_rate'}}">{{item.baseCurrency}}/{{item.quoteCurrency}} 实时汇率</text>
+            <text wx:elif="{{item.monitorType === 'gold'}}">上海金 实时金价</text>
             <text wx:else>{{item.departDatesText}} <text wx:if="{{item.flightWay === 'Roundtrip'}}"> 往返</text><text wx:else> 单程</text></text>
           </view>
           <view wx:if="{{item.latestChangeInfo}}" style="font-size: 24rpx; display: flex; align-items: center; gap: 8rpx;">

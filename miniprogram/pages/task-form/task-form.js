@@ -21,7 +21,7 @@ const FLIGHT_WAY_OPTIONS = [
 const AIRPORT_OPTIONS = AIRPORTS.map((a) => ({ label: `${a.city} (${a.code})`, value: a.code }));
 const CURRENCY_OPTIONS = CURRENCIES.map((c) => ({ label: `${c.name} (${c.code})`, value: c.code }));
 
-const MONITOR_TYPES = ["flight", "exchange_rate"];
+const MONITOR_TYPES = ["flight", "exchange_rate", "gold"];
 
 function generateTaskName(form, flightWayIndex, monitorType) {
   if (monitorType === "exchange_rate") {
@@ -29,6 +29,10 @@ function generateTaskName(form, flightWayIndex, monitorType) {
     const quote = form.quoteCurrency || "";
     if (base && quote) return `${base}/${quote} 汇率监控`;
     return "";
+  }
+
+  if (monitorType === "gold") {
+    return "黄金价格监控";
   }
 
   const departDate = form.departDates || "";
@@ -127,9 +131,14 @@ Page({
         baseData.monitorTypeValue = "exchange_rate";
         baseData["form.threshold"] = "0.01";
         baseData["form.checkIntervalSec"] = "300";
+      } else if (query.monitorType === "gold") {
+        baseData.monitorTypeIndex = 2;
+        baseData.monitorTypeValue = "gold";
+        baseData["form.threshold"] = "1";
+        baseData["form.checkIntervalSec"] = "300";
       }
 
-      wx.setNavigationBarTitle({ title: isFx ? "创建汇率监控" : "创建机票监控" });
+      wx.setNavigationBarTitle({ title: isFx ? "创建汇率监控" : query.monitorType === "gold" ? "创建金价监控" : "创建机票监控" });
       this.setData(baseData);
     }
   },
@@ -155,7 +164,7 @@ Page({
       const task = await request({ url: `/tasks/${id}` });
       const monitorType = task.monitorType || "flight";
       const monitorTypeIndex = MONITOR_TYPES.indexOf(monitorType);
-      wx.setNavigationBarTitle({ title: `编辑${monitorType === "exchange_rate" ? "汇率" : "机票"}监控` });
+      wx.setNavigationBarTitle({ title: `编辑${monitorType === "exchange_rate" ? "汇率" : monitorType === "gold" ? "金价" : "机票"}监控` });
       const flightWayIndex = task.flightWay === "Roundtrip" ? 1 : 0;
       const departDates = task.departDates || [];
       const returnDates = task.returnDates || [];
@@ -456,7 +465,7 @@ Page({
         wx.showToast({ title: "基础货币和报价货币不能相同", icon: "none" });
         return;
       }
-    } else {
+    } else if (monitorType === "flight") {
       // 机票监控校验
       if (!form.placeFrom) {
         wx.showToast({ title: "请选择出发城市", icon: "none" });
@@ -483,6 +492,7 @@ Page({
         return;
       }
     }
+    // gold 类型无需额外校验
 
     const autoName = generateTaskName(form, this.data.flightWayIndex, monitorType);
     let subscribeAccepted = false;
@@ -507,8 +517,8 @@ Page({
     const commonPayload = {
       name: autoName,
       monitorType,
-      threshold: Number(form.threshold) || (monitorType === "exchange_rate" ? 0.01 : 50),
-      checkIntervalSec: Number(form.checkIntervalSec) || (monitorType === "exchange_rate" ? 300 : 600),
+      threshold: Number(form.threshold) || (monitorType === "exchange_rate" ? 0.01 : monitorType === "gold" ? 1 : 50),
+      checkIntervalSec: Number(form.checkIntervalSec) || (monitorType === "exchange_rate" || monitorType === "gold" ? 300 : 600),
       targetPrice: form.targetPrice ? Number(form.targetPrice) : null,
       notifyOnDrop: form.notifyOnDrop,
       pushplusEnabled: form.pushplusEnabled,
@@ -525,8 +535,10 @@ Page({
         ...commonPayload,
         baseCurrency: form.baseCurrency.toUpperCase(),
         quoteCurrency: form.quoteCurrency.toUpperCase()
-        // 故意不包含机票字段
       };
+    } else if (monitorType === "gold") {
+      // 金价监控无需额外字段，payload 全部使用 commonPayload
+      payload = { ...commonPayload };
     } else {
       payload = {
         ...commonPayload,
@@ -535,7 +547,6 @@ Page({
         placeTo: form.placeTo.toUpperCase(),
         departDates: form.departDates,
         returnDates: form.returnDates || undefined
-        // 故意不包含汇率字段
       };
     }
 
