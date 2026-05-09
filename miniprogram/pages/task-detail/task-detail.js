@@ -118,6 +118,7 @@ Page({
         placeToText = variety;
         departDatesText = "实时";
         returnDatesText = "";
+        varietyName = variety;
       } else {
         const fromCity = getCityByCode(task.placeFrom) || task.placeFrom;
         const toCity = getCityByCode(task.placeTo) || task.placeTo;
@@ -173,7 +174,8 @@ Page({
           returnDatesText,
           lastCheckedText: formatDateTime(task.lastCheckedAt),
           nextCheckText: formatDateTime(task.nextCheckAt),
-          currentPriceText
+          currentPriceText,
+          varietyName
         },
         history,
         actionItems,

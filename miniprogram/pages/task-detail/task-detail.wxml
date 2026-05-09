@@ -37,7 +37,7 @@
       <block wx:elif="{{isGold}}">
         <view class="detail-row">
           <text class="detail-label">品种</text>
-          <text class="detail-value">{{task.latestSnapshot?.variety || '上海金'}}</text>
+          <text class="detail-value">{{task.varietyName || '上海金'}}</text>
         </view>
         <view class="detail-row">
           <text class="detail-label">变动阈值</text>
