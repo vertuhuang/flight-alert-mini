@@ -101,7 +101,7 @@ Page({
           };
         })
 
-      let headerTitle, placeFromText, placeToText, departDatesText, returnDatesText;
+      let headerTitle, placeFromText, placeToText, departDatesText, returnDatesText, varietyName;
       if (isFx) {
         const baseName = getCurrencyName(task.baseCurrency);
         const quoteName = getCurrencyName(task.quoteCurrency);
@@ -113,7 +113,7 @@ Page({
       } else if (isGold) {
         const variety = task.latestSnapshot?.variety || "黄金";
         headerTitle = `${variety} 金价监控`;
-        placeFromText = "上海金";
+        placeFromText = "黄金价格";
         placeToText = variety;
         departDatesText = "实时";
         returnDatesText = "";

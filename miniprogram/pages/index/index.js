@@ -143,7 +143,7 @@ Page({
           const routeText = task.monitorType === "exchange_rate"
             ? `${getCurrencyName(task.baseCurrency)} / ${getCurrencyName(task.quoteCurrency)}`
             : task.monitorType === "gold"
-            ? "上海金"
+            ? "黄金价格"
             : `${getCityByCode(task.placeFrom) || task.placeFrom} / ${getCityByCode(task.placeTo) || task.placeTo}`;
 
           return {

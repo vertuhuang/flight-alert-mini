@@ -14,6 +14,7 @@ module.exports = {
   HISTORIES_COLLECTION:
     process.env.HISTORIES_COLLECTION || "flight_alert_histories",
   EVENTS_COLLECTION: process.env.EVENTS_COLLECTION || "flight_alert_events",
+  GOLD_CACHE_COLLECTION: process.env.GOLD_CACHE_COLLECTION || "flight_alert_gold_cache",
   CTRIP_LOWEST_PRICE_URL:
     "https://flights.ctrip.com/itinerary/api/12808/lowestPrice",
   CTRIP_SCHEDULE_URL:

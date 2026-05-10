@@ -932,8 +932,8 @@ class MonitorService {
         updatedAt: checkedAt
       };
 
-      // 仅当有变化时记录历史；但金价任务每次检查都记历史（用于展示走势图）
-      const shouldLogHistory = changes.length > 0 || snapshot.monitorType === "gold";
+      // 仅当有变化时记录历史（金价与机票/汇率逻辑一致，超过阈值才记录）
+      const shouldLogHistory = changes.length > 0;
 
       // Filter changes for notification based on strategy
       const notifyChanges = changes.filter((change) => {

@@ -1,6 +1,7 @@
 const {
   CLOUDBASE_ENV_ID,
   EVENTS_COLLECTION,
+  GOLD_CACHE_COLLECTION,
   HISTORIES_COLLECTION,
   TASKS_COLLECTION,
   USERS_COLLECTION
@@ -10,7 +11,8 @@ const ALL_COLLECTIONS = [
   TASKS_COLLECTION,
   USERS_COLLECTION,
   HISTORIES_COLLECTION,
-  EVENTS_COLLECTION
+  EVENTS_COLLECTION,
+  GOLD_CACHE_COLLECTION
 ];
 
 function stripDocumentMeta(item) {
@@ -394,6 +396,30 @@ class CloudBaseStore {
     await this.db.collection(TASKS_COLLECTION).doc(taskId).remove();
     await this.#removeByFilter(HISTORIES_COLLECTION, { taskId });
     await this.#removeByFilter(EVENTS_COLLECTION, { taskId });
+  }
+
+  /**
+   * 写入一条金价缓存记录，并按天修剪（每天最多保留 100 条，约 30min 一条 * 48 + 余量）
+   */
+  async writeGoldCache(item) {
+    await this.init();
+    await this.db.collection(GOLD_CACHE_COLLECTION).doc(item.id).set(item);
+    // 保留最新的 100 条（约 2 天），按 fetchedAt 降序修剪
+    await this.#pruneOverflow(GOLD_CACHE_COLLECTION, "fetchedAt", null, 100);
+  }
+
+  /**
+   * 获取最新一条金价缓存记录
+   * @returns {object|null}
+   */
+  async getLatestGoldCache() {
+    await this.init();
+    const res = await this.db
+      .collection(GOLD_CACHE_COLLECTION)
+      .orderBy("fetchedAt", "desc")
+      .limit(1)
+      .get();
+    return stripDocumentMeta(normalizeDocResult(res.data));
   }
 
   async #syncCollection(collectionName, previousItems, nextItems) {

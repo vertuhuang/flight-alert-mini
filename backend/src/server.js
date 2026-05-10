@@ -5,6 +5,7 @@ const { CloudBaseStore } = require("./lib/cloudbase-store");
 const { CtripProvider } = require("./lib/ctrip-provider");
 const { JuheExchangeProvider } = require("./lib/juhe-exchange-provider");
 const { JuheGoldProvider } = require("./lib/juhe-gold-provider");
+const { GoldCacheService } = require("./lib/gold-cache-service");
 const { MonitorService } = require("./lib/monitor-service");
 const { PushPlusNotifier } = require("./lib/pushplus-notifier");
 const { WxSubscribeNotifier } = require("./lib/wx-subscribe-notifier");
@@ -19,7 +20,8 @@ const wxSubscribeNotifier = new WxSubscribeNotifier();
 // Composite provider: routes to the appropriate provider based on task type
 const flightProvider = new CtripProvider();
 const exchangeProvider = new JuheExchangeProvider();
-const goldProvider = new JuheGoldProvider();
+// 将 store 注入 goldProvider，使其可以读取定时缓存
+const goldProvider = new JuheGoldProvider({ store });
 const provider = {
   fetchPrices(task) {
     const type = task.monitorType || "flight";
@@ -29,6 +31,9 @@ const provider = {
   }
 };
 const monitorService = new MonitorService({ store, provider, notifier, wxSubscribeNotifier });
+
+// 金价定时缓存服务（每 30 分钟拉取一次聚合数据 API，写入 gold_price_cache 集合）
+const goldCacheService = new GoldCacheService({ store });
 
 function getTaskIdFromPath(pathname) {
   const match = pathname.match(/^\/api\/tasks\/([^/]+)(?:\/(check-now|history|events|clear-unread|subscribe-quota))?$/);
@@ -352,11 +357,15 @@ process.on("uncaughtException", (err) => {
 });
 
 monitorService.init().then(() => {
+  // 启动金价定时缓存（store 已初始化后再启动，确保集合已创建）
+  goldCacheService.start();
   server.listen(PORT, HOST, () => {
     console.log(`Flight Alert Mini backend listening on http://${HOST}:${PORT}`);
   });
 }).catch((err) => {
   console.error("Failed to initialize monitor service:", err);
+  // store 初始化失败时也尝试启动缓存服务（非致命）
+  goldCacheService.start();
   server.listen(PORT, HOST, () => {
     console.log(`Flight Alert Mini backend listening on http://${HOST}:${PORT} (store init failed)`);
   });

@@ -41,7 +41,7 @@
         <view style="margin-top: 8rpx; display: flex; align-items: center; justify-content: space-between;">
           <view style="font-size: 24rpx; color: #888888;">
             <text wx:if="{{item.monitorType === 'exchange_rate'}}">{{item.baseCurrency}}/{{item.quoteCurrency}} 实时汇率</text>
-            <text wx:elif="{{item.monitorType === 'gold'}}">上海金 实时金价</text>
+            <text wx:elif="{{item.monitorType === 'gold'}}">黄金价格 实时金价</text>
             <text wx:else>{{item.departDatesText}} <text wx:if="{{item.flightWay === 'Roundtrip'}}"> 往返</text><text wx:else> 单程</text></text>
           </view>
           <view wx:if="{{item.latestChangeInfo}}" style="font-size: 24rpx; display: flex; align-items: center; gap: 8rpx;">
